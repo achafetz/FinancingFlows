@@ -66,7 +66,7 @@
 	*http://stats.oecd.org/qwids/
 	
 	foreach f in OOF Private ODA {
-		import excel "${data}\`f'.xlsx", sheet("`f'") firstrow clear
+		import excel "$data\`f'.xlsx", sheet("`f'") firstrow clear
 
 		*label years
 			foreach year of var B-BC{
@@ -86,7 +86,7 @@
 		*sort for merging
 			sort ctry_oecd year 
 		*save
-			save "${output}\`f'.dta", replace	
+			save "$output\`f'.dta", replace	
 	}
 	*end
 	
@@ -661,69 +661,69 @@ bob
 	clear
 	local count = 1
 	foreach t in "sum" "mean"{
-	foreach x in "if ldc==2" "if ldc!=2" ""{
-		use "$output\financialflows_const.dta", clear
-		gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
-			lab var totflow "Total Financial Flows"
-		di "locals: `t' & `x'"
-		*collapse
-			collapse (`t') oda oof private remittances epol_* totflow pop (max) cpi_d `x', by(year)
-		
-		*create offical flows variable
-			qui: gen official = epol_oda + epol_oof
-				lab var official "ODA and other offical flows"
-		
-		*create per capita flows
-			foreach f in official private remittances{
-				if "`f'" == "official" gen pc_`f'_`t' = (`f'/population)*1000000
-				else gen pc_`f'_`t' = (epol_`f'/population)*1000000
-				lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
-				}
-				*end	
-				
-		*create real flows (total)
-			foreach f in official private remittances{
-				if "`f'" == "official" gen real_`f'_`t' = `f'/cpi_d
-				else gen real_`f'_`t' = epol_`f'/cpi_d
-				lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
-				}
-				*end
-				
-		*create real flows (per capita)
-			foreach f in official private remittances{
-				gen realpc_`f'_`t' = (real_`f'_`t'/population)*1000000
-				lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
-				}
-				*end
+		foreach x in "if ldc==2" "if ldc!=2" ""{
+			use "$output\financialflows_const.dta", clear
+			gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
+				lab var totflow "Total Financial Flows"
+			di "locals: `t' & `x'"
+			*collapse
+				collapse (`t') oda oof private remittances epol_* totflow pop (max) cpi_d `x', by(year)
 			
-		*share of total
-			foreach f in official private remittances{
-				if "`f'" == "official" gen share_`f'_`t' = (`f'/totflow)*100
-				else gen share_`f'_`t' = (epol_`f'/totflow)*100	
-				lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
-				}
-				*end
+			*create offical flows variable
+				qui: gen official = epol_oda + epol_oof
+					lab var official "ODA and other offical flows"
+			
+			*create per capita flows
+				foreach f in official private remittances{
+					if "`f'" == "official" gen pc_`f'_`t' = `f'/population
+					else gen pc_`f'_`t' = epol_`f'/population
+					lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
+					}
+					*end	
+					
+			*create real flows (total)
+				foreach f in official private remittances{
+					if "`f'" == "official" gen real_`f'_`t' = `f'/cpi_d
+					else gen real_`f'_`t' = epol_`f'/cpi_d
+					lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
+					}
+					*end
+					
+			*create real flows (per capita)
+				foreach f in official private remittances{
+					gen realpc_`f'_`t' = real_`f'_`t'/population
+					lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
+					}
+					*end
 				
-		*convert to billions (already millions)
-			qui: ds year share_* population*, not
-			foreach v in `r(varlist)'{
-				qui: replace `v' = `v'/1000
-				}
-				*end
+			*share of total
+				foreach f in official private remittances{
+					if "`f'" == "official" gen share_`f'_`t' = (`f'/totflow)*100
+					else gen share_`f'_`t' = (epol_`f'/totflow)*100	
+					lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
+					}
+					*end
+					
+			*convert to billions (already millions)
+				qui: ds year share_* population* pc_* realpc_*, not
+				foreach v in `r(varlist)'{
+					qui: replace `v' = `v'/1000
+					}
+					*end
 
-		*export
-			local ffex `"export excel year official epol* pc* real* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
-			if `count' == 1 `ffex' sheet("ConstantLDCs")
-			else if `count' == 2 `ffex' sheet("ConstantOther")
-			else if `count' == 3 `ffex' sheet("TotConstant")
-			else if `count' == 4 `ffex' sheet("ConstavgLDCs")
-			else if `count' == 5 `ffex' sheet("ConstavgOther")
-			else `ffex' sheet("TotConstavg") 
-		clear
-		local count = 1 + `count'
+			*export
+				local ffex `"export excel year official epol* pc* real* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				if `count' == 1 `ffex' sheet("ConstantLDCs")
+				else if `count' == 2 `ffex' sheet("ConstantOther")
+				else if `count' == 3 `ffex' sheet("TotConstant")
+				else if `count' == 4 `ffex' sheet("ConstavgLDCs")
+				else if `count' == 5 `ffex' sheet("ConstavgOther")
+				else `ffex' sheet("TotConstavg") 
+			clear
+			local count = 1 + `count'
 		}
-		}
-		*end
+	}
+	*end
 		
 ********************************************************************************
 ********************************************************************************
