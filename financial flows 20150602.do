@@ -4,20 +4,39 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/2   **
+**   Last Updated 6/4   **
 **************************
 
-/* Data sources
+/*//////////////////////////////////////////////////////////////////////////////
+  
+  Outline
+	- SET DIRECTORIES
+	- IMPORT AND CLEAN DATA
+	- MERGE
+	- REPORTS
+	- INTERPOLATION/EXTRAPOLATION
+	- TOTAL FLOWS RANKING TABLES
+	- FIGURES
+	- IDENTIFY CONSTANT SAMPLE
+	- CONSTANT SAMPLE EXPORTS
+	- REVENUE SHARES
+
+ Data sources
 	- World Bank WDI
 	- UNCTAD
 	- OECD
 	- IMF
-*/
+	
+*///////////////////////////////////////////////////////////////////////////////
 
-clear
-set more off
-
+********************************************************************************
+********************************************************************************
+	
 ** SET DIRECTORIES **
+
+	clear
+	set more off
+
 *  must be run each time Stata is opened
 	global projectpath "U:\Chief Economist Work\Financing Flows\"
 	cd "$projectpath"
@@ -529,7 +548,7 @@ bob
 ********************************************************************************
 ********************************************************************************
 
-** TOTAL FLOWS RANKING TABLE **
+** TOTAL FLOWS RANKING TABLES **
 
 	use "$output\financialflows.dta", clear
 	
@@ -632,6 +651,80 @@ bob
 	*save
 		save "$output\financialflows_const.dta", replace
 
+
+********************************************************************************
+********************************************************************************
+
+** CONSTANT SAMPLE EXPORTS **
+			
+*Constant Sample: Create and export sums/averages for each category
+	clear
+	local count = 1
+	foreach t in "sum" "mean"{
+	foreach x in "if ldc==2" "if ldc!=2" ""{
+		use "$output\financialflows_const.dta", clear
+		gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
+			lab var totflow "Total Financial Flows"
+		di "locals: `t' & `x'"
+		*collapse
+			collapse (`t') oda oof private remittances epol_* totflow pop (max) cpi_d `x', by(year)
+		
+		*create offical flows variable
+			qui: gen official = epol_oda + epol_oof
+				lab var official "ODA and other offical flows"
+		
+		*create per capita flows
+			foreach f in official private remittances{
+				if "`f'" == "official" gen pc_`f'_`t' = (`f'/population)*1000000
+				else gen pc_`f'_`t' = (epol_`f'/population)*1000000
+				lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
+				}
+				*end	
+				
+		*create real flows (total)
+			foreach f in official private remittances{
+				if "`f'" == "official" gen real_`f'_`t' = `f'/cpi_d
+				else gen real_`f'_`t' = epol_`f'/cpi_d
+				lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
+				}
+				*end
+				
+		*create real flows (per capita)
+			foreach f in official private remittances{
+				gen realpc_`f'_`t' = (real_`f'_`t'/population)*1000000
+				lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
+				}
+				*end
+			
+		*share of total
+			foreach f in official private remittances{
+				if "`f'" == "official" gen share_`f'_`t' = (`f'/totflow)*100
+				else gen share_`f'_`t' = (epol_`f'/totflow)*100	
+				lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
+				}
+				*end
+				
+		*convert to billions (already millions)
+			qui: ds year share_* population*, not
+			foreach v in `r(varlist)'{
+				qui: replace `v' = `v'/1000
+				}
+				*end
+
+		*export
+			local ffex `"export excel year official epol* pc* real* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+			if `count' == 1 `ffex' sheet("ConstantLDCs")
+			else if `count' == 2 `ffex' sheet("ConstantOther")
+			else if `count' == 3 `ffex' sheet("TotConstant")
+			else if `count' == 4 `ffex' sheet("ConstavgLDCs")
+			else if `count' == 5 `ffex' sheet("ConstavgOther")
+			else `ffex' sheet("TotConstavg") 
+		clear
+		local count = 1 + `count'
+		}
+		}
+		*end
+		
 ********************************************************************************
 ********************************************************************************
 
@@ -803,73 +896,136 @@ bob
 			note("Sources: ODA, OOF, Private Flows (OECD); Remittances, Tax Revenues (World Bank)" "Note: Tax Revenues from the Central Government and are extrapolated")
 		graph export "$graph/ff_alltax.pdf", replace
 
-			
-*Constant Sample: Create and export sums/averages for each category
-clear
-	local count = 1
-	foreach t in "sum" "mean"{
-	foreach x in "if ldc==2" "if ldc!=2" ""{
-		use "$output\financialflows_const.dta", clear
-		gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
-			lab var totflow "Total Financial Flows"
-		di "locals: `t' & `x'"
-		*collapse
-			collapse (`t') oda oof private remittances epol_* totflow pop (max) cpi_d `x', by(year)
-		
-		*create offical flows variable
-			qui: gen official = epol_oda + epol_oof
-				lab var official "ODA and other offical flows"
-		
-		*create per capita flows
-			foreach f in official private remittances{
-				if "`f'" == "official" gen pc_`f'_`t' = (`f'/population)*1000000
-				else gen pc_`f'_`t' = (epol_`f'/population)*1000000
-				lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
-				}
-				*end	
-				
-		*create real flows (total)
-			foreach f in official private remittances{
-				if "`f'" == "official" gen real_`f'_`t' = `f'/cpi_d
-				else gen real_`f'_`t' = epol_`f'/cpi_d
-				lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
-				}
-				*end
-				
-		*create real flows (per capita)
-			foreach f in official private remittances{
-				gen realpc_`f'_`t' = (real_`f'_`t'/population)*1000000
-				lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
-				}
-				*end
-			
-		*share of total
-			foreach f in official private remittances{
-				if "`f'" == "official" gen share_`f'_`t' = (`f'/totflow)*100
-				else gen share_`f'_`t' = (epol_`f'/totflow)*100	
-				lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
-				}
-				*end
-				
-		*convert to billions (already millions)
-			qui: ds year share_* population*, not
-			foreach v in `r(varlist)'{
-				qui: replace `v' = `v'/1000
-				}
-				*end
 
-		*export
-			local ffex `"export excel year official epol* pc* real* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
-			if `count' == 1 `ffex' sheet("ConstantLDCs")
-			else if `count' == 2 `ffex' sheet("ConstantOther")
-			else if `count' == 3 `ffex' sheet("TotConstant")
-			else if `count' == 4 `ffex' sheet("ConstavgLDCs")
-			else if `count' == 5 `ffex' sheet("ConstavgOther")
-			else `ffex' sheet("TotConstavg") 
-		clear
-		local count = 1 + `count'
-		}
+bob
+
+********************************************************************************
+********************************************************************************
+
+** REVENUE SHARES **
+
+	*open up wdi in stata
+		*ssc install wbopendata
+		wbopendata, language(en - English) country() topics(13 - Public Sector) indicator() long clear
+
+	*pull out relevant revenue variables
+		*ds , has(varlabel "*revenue*" "*Revenue*")  varwidth(20) 
+		* interested in breakdown of revenue --> % of revenue (variables)
+		ds , has(varlabel "*% of revenue*")  varwidth(20)
+		/* revenue variable on interest payment as % of revenue cause %'s 
+			to go over 100% so remove this */
+		ds `r(varlist)', not(varlab "*Interest*") varwidth(20)
+
+	*create a global macro for revenue % variables
+		global revpct `r(varlist)'
+		describe $revpct
+
+	*keep just relevant revenue variables 
+		keep countryname countrycode region year $revpct
+		
+	* create a total revenue variable to make sure they add up (close) to 100
+		egen totrevpct =  rowtotal($revpct), m
+		sum totrevpct, d
+		
+
+	*collapse for overall average breakdown in revenue
+		*save variable labels
+		foreach v of var * {
+				local l`v' : variable label `v'
+					if `"`l`v''"' == "" {
+					local l`v' "`v'"
+				}
 		}
 		*end
-	
-	
+		
+		collapse (mean) $revpct, by(year)
+		
+		*re-attach variable labels
+			foreach v of var * {
+				label var `v' "`l`v''"
+			}
+			*end
+			
+	*drop missing data
+		drop if year<1990 | year==2014 //no data in collapse
+		
+	*check total percent (dealing with averages so it wont be perfect	
+		egen totrevpct =  rowtotal($revpct), m //tends to be about 5-10% over 100%
+
+	*rename
+		rename gc_rev_gotr_zs grants
+		rename gc_rev_socl_zs socialconts
+		rename gc_tax_gsrv_rv_zs tax_gds
+		rename gc_tax_intt_rv_zs tax_trade
+		rename gc_tax_othr_rv_zs tax_oth
+		rename gc_tax_ypkg_rv_zs tax_inc
+
+	*relabel (removing (% of revenue)
+		ds year totrevpct ,not
+		foreach i in `r(varlist)' {
+			local a : variable label `i'
+			local a: subinstr local a " (% of revenue)" ""
+			label var `i' "`a'"
+			}
+			*end
+		
+	* all flows line graph
+		ds year totrevpct,not
+		twoway line `r(varlist)' year, legend(size(small)) xlabel(1990 (5) 2013) ///
+			ytitle("% of total revenue") title("Average Annual Country Revenue Shares")
+	* lumped taxes line graph
+		egen tottax = rowtotal(tax_gds tax_trade tax_oth tax_inc)
+		twoway connect grants socialconts tottax year, ///
+			legend(order (1 "Grants" 2 "Social contributions" 3 "Taxes") rows(1)) ///
+			xlabel(1990 (5) 2013) ///
+			ytitle("% of total revenue") ///
+			title("Average Annual Country Revenue Shares")
+		
+	*generate stacked variables for stacked area graph
+		local stack grants a_socialconts a_tax_gds a_tax_trade a_tax_inc
+		local new socialconts tax_gds tax_trade tax_inc tax_oth
+		local n: word count `new'	
+		forvalues i = 1/`n'{
+			local a : word `i' of `stack'
+			local b : word `i' of `new'
+			gen a_`b' = `b' + `a'
+			local label : variable label `b'		
+				lab var a_`b' "`label'"
+			}
+			*end
+		
+	*stacked area		
+		twoway area a_tax_oth a_tax_inc a_tax_trade a_tax_gds a_socialconts grants year, ///
+			title("Average Annual Country Revenue Shares") ///
+			ytitle("% of total revenue") ///
+			ylabel(0 (20) 120) ///
+			xlabel(1990 (5) 2013) ///
+			legend(off) /// legend(order(6 5 4 3 2 1) size(small))
+			text(10 1994 "Grants/other revenue") ///
+			text(32 1994 "Social contributions") ///
+			text(55 1994 "Taxes: goods/services") ///
+			text(76 1994 "Taxes: internat'l trade") ///
+			text(95 1996 "Taxes: income, profits, capital gains") ///
+			text(113 1993 "Taxes: other") 
+			
+	*stacked area (taxes all shaded the same color)		
+		twoway area a_tax_oth a_socialconts grants year || ///  
+			line a_tax_inc year, lcolor(white) || ///
+			line a_tax_trade year, lcolor(white) || ///
+			line a_tax_gds year, lcolor(white) ///
+			title("Average Annual Country Revenue Shares") ///
+			ytitle("% of total revenue") ///
+			lcolor(white) ///
+			ylabel(0 (20) 120) ///
+			xlabel(1990 (5) 2013) ///
+			legend(off) /// legend(order(6 5 4 3 2 1) size(small))
+			text(10 1994 "Grants/other revenue") ///
+			text(32 1994 "Social contributions") ///
+			text(55 1994 "Taxes: goods/services") ///
+			text(75 1994 "Taxes: internat'l trade") ///
+			text(95 1996 "Taxes: income, profits, capital gains") ///
+			text(113 1993 "Taxes: other") ///
+			note("Note: Total will be greater than 100 percent due to working with annual country average shares" ///
+				"Source: World Bank WDI") 
+		graph export "$graph/ff_revshares.pdf", replace
+		
