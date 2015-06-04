@@ -263,7 +263,7 @@
 *IMF - Revenues, tax and non tax
 	*http://data.imf.org/?sk=0C6E53F6-938F-4111-B8F0-31306DF7AA59&ss=1414688546116
 	
-	import delimited "U:\Chief Economist Work\Financing Flows\RawData\Revenues.csv", clear 
+	import delimited "$data\Revenues.csv", clear 
 
 	*eliminate noncash account
 		keep if accountingmethodname=="Cash"
