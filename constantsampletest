@@ -1,0 +1,79 @@
+********************************************************************************
+********************************************************************************
+
+** CONSTANT SAMPLE EXPORTS **
+			
+*Constant Sample: Create and export sums/averages for each category
+	clear
+	local count = 1
+	foreach t in "sum" "mean"{
+		foreach x in "if ldc==2" "if ldc!=2" ""{
+			use "$output\financialflows_const.dta", clear
+			gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
+				lab var totflow "Total Financial Flows"
+			di "locals: `t' & `x'"
+			
+			*collapse
+				collapse (`t') oda oof private remittances epol_* totflow pop (max) cpi_d `x', by(year)
+			
+			*create offical flows variable
+				qui: gen epol_official = epol_oda + epol_oof
+					lab var official "ODA and other offical flows"
+			
+			*create various flows
+				foreach f in official private remittances{
+					* per capita flows
+						gen pc_`f'_`t' = epol_`f'/population
+						lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
+						* base for deflator
+							qui: sum pc_`f'_`t' if year==2000
+							global pcnombase_`f'_`t' = `r(mean)'
+					* real flows, total
+						gen real_`f'_`t' = epol_`f'/cpi_d
+						lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
+						* base for deflator
+							qui: sum real_`f'_`t' if year==2000
+							global realbase_`f'_`t' = `r(mean)'
+					* real flows per capita
+						gen realpc_`f'_`t' = real_`f'_`t'/population
+						lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
+					* share of total
+						gen share_`f'_`t' = (epol_`f'/totflow)*100	
+						lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
+					}
+					*end	
+								
+			*create real and nominal % changes with a base of 2000 per capita
+				foreach f in official private remittances{
+					qui: sum epol_`f'_`t' if year==2000
+						global nombase_`f'_`t' = `r(mean)'
+					gen compn_`f'_`t' = epol_`f' * (${pcnombase_`f'_`t'}/${nombase_`f'_`t'})
+					gen compr_`f'_`t' = epol_`f' * (${pcnombase_`f'_`t'}/${realbase_`f'_`t'})
+				}
+				*end 
+				
+				/*
+					(NPC_2000/F^N_2000)
+				*/
+					
+			*convert to billions (already millions)
+				qui: ds year share_* population* pc_* realpc_* comp*, not
+				foreach v in `r(varlist)'{
+					qui: replace `v' = `v'/1000
+					}
+					*end
+
+			*export
+				local ffex `"export excel year official epol* pc* real* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				if `count' == 1 `ffex' sheet("ConstantLDCs")
+				else if `count' == 2 `ffex' sheet("ConstantOther")
+				else if `count' == 3 `ffex' sheet("TotConstant")
+				else if `count' == 4 `ffex' sheet("ConstavgLDCs")
+				else if `count' == 5 `ffex' sheet("ConstavgOther")
+				else `ffex' sheet("TotConstavg") 
+			clear
+			local count = 1 + `count'
+		}
+	}
+	*end
+		
