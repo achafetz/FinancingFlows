@@ -21,6 +21,6 @@ Taxes on goods and services include general sales and turnover or value added ta
 Other taxes include employer payroll or labor taxes, taxes on property, and taxes not allocable to other categories, such as penalties for late payment or nonpayment of taxes.  
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
 
-###Taxes on income, profits and capital gains (% of revenue)
-Taxes on income, profits, and capital gains are levied on the actual or presumptive net income of individuals, on the profits of corporations and enterprises, and on capital gains, whether realized or not, on land, securities, and other assets. Intragovernmental payments are eliminated in consolidation.  
+###Taxes on international trade (% of revenue)
+Taxes on international trade include import duties, export duties, profits of export or import monopolies, exchange profits, and exchange taxes. 
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
