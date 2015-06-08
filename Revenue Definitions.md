@@ -13,14 +13,14 @@ Social contributions include social security contributions by employees, employe
 Taxes on goods and services include general sales and turnover or value added taxes, selective excises on goods, selective taxes on services, taxes on the use of goods or property, taxes on extraction and production of minerals, and profits of fiscal monopolies.  
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
 
-###Taxes on goods and services (% of revenue)
-Taxes on goods and services include general sales and turnover or value added taxes, selective excises on goods, selective taxes on services, taxes on the use of goods or property, taxes on extraction and production of minerals, and profits of fiscal monopolies.  
+###Taxes on international trade (% of revenue)
+Taxes on international trade include import duties, export duties, profits of export or import monopolies, exchange profits, and exchange taxes. 
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
 
 ###Other taxes (% of revenue)
 Other taxes include employer payroll or labor taxes, taxes on property, and taxes not allocable to other categories, such as penalties for late payment or nonpayment of taxes.  
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
 
-###Taxes on international trade (% of revenue)
-Taxes on international trade include import duties, export duties, profits of export or import monopolies, exchange profits, and exchange taxes. 
+###Taxes on income, profits and capital gains (% of revenue)
+Taxes on income, profits, and capital gains are levied on the actual or presumptive net income of individuals, on the profits of corporations and enterprises, and on capital gains, whether realized or not, on land, securities, and other assets. Intragovernmental payments are eliminated in consolidation.  
 *International Monetary Fund, Government Finance Statistics Yearbook and data files.*
