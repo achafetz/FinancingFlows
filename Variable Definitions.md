@@ -2,7 +2,7 @@ VARIABLE DEFITIONS
 ===
 
 ####Official Development Assistance (ODA), Net Disbursement
-*Source: OECD QWIDS (http://stats.oecd.org/qwids/), DAC2A*	
+*[Source: OECD QWIDS,] (http://stats.oecd.org/qwids/) DAC2A*	
 
 Grants or loans to countries and territories on the DAC List of ODA Recipients (developing countries) and to multilateral agencies which are: (a) undertaken by the official sector; (b) with promotion of economic development and welfare as the main objective; (c) at concessional financial terms (if a loan, having a grant element of at least 25 per cent). In addition to financial flows, technical co-operation is included in aid. Grants, loans and credits for military purposes are excluded. Transfer payments to private individuals (e.g. pensions, reparations or insurance payouts) are in general not counted. 
 
