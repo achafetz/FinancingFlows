@@ -40,6 +40,33 @@
 *  must be run each time Stata is opened
 	global projectpath "U:\Chief Economist Work\Financing Flows\"
 	cd "$projectpath"
+	
+* Run a macro to set up study folder
+	local pFolder "Financing Flows"
+	foreach dir in `pFolder' {
+		confirmdir "`dir'"
+		if `r(confirmdir)'==170 {
+			mkdir "`dir'"
+			display in yellow "Project directory named: `dir' created"
+			}
+		else disp as error "`dir' already exists, not created."
+		cd "$projectpath/`dir'"
+		}
+	* end
+
+* Run initially to set up folder structure
+* Choose your folders to set up as the local macro `folders'
+	local folders RawData StataOutput StataFigures ExcelOutput Documents
+	foreach dir in `folders' {
+		confirmdir "`dir'"
+		if `r(confirmdir)'==170 {
+				mkdir "`dir'"
+				disp in yellow "`dir' successfully created."
+			}
+		else disp as error "`dir' already exists. Skipped to next folder."
+	}
+	*end
+*Set up global file paths located within project path
 	*these folders must exist in the parent folder
 	global data "$projectpath\RawData\"
 	global output "$projectpath\StataOutput\"
