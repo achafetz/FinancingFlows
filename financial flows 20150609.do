@@ -478,6 +478,14 @@ use "$data\ICTDGRDmerged_edited.dta", clear
 	replace iso = "COD" if country=="Congo, Dem. Rep."
 	replace iso = "TLS" if country=="Timor-Leste"
 	replace iso = "PSE" if country=="West Bank and Gaza"
+	
+	*add source data
+		ds year iso, not
+		foreach v of varlist `r(varlist)'{
+			note `v': Source: ICTDGRD (June 8, 2015)
+			}
+			*end
+				
 save "$output\ICTDGRDtax.dta", replace
 
 *Mike Crosswell's  Strategic Indicators (USAID) 
