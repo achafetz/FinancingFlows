@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/8   **
+**   Last Updated 6/9   **
 **************************
 
 /*//////////////////////////////////////////////////////////////////////////////
@@ -38,11 +38,14 @@
 	set more off
 
 *  must be run each time Stata is opened
-	global projectpath "U:\Chief Economist Work\Financing Flows\"
+	/* Choose the project path location to where you want the project parent 
+	   folder to go on your machine. Make sure it ends with a forward slash */
+	global projectpath "U:\Chief Economist Work\"
 	cd "$projectpath"
 	
 * Run a macro to set up study folder
-	local pFolder "Financing Flows"
+	* Choose the pFolder as the name of your project
+	local pFolder FinancingFlows
 	foreach dir in `pFolder' {
 		confirmdir "`dir'"
 		if `r(confirmdir)'==170 {
