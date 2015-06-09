@@ -470,6 +470,15 @@
 	*save
 		save "$output\weo.dta", replace
 	
+*ICTDGRD - Government Tax Revenue 
+* Source: http://www.ictd.ac/en/about-ictd-government-revenue-dataset#Dataset
+use "$data\ICTDGRDmerged_edited.dta", clear
+	*rename iso codes for merging
+	replace iso = "na_ode_iso115" if country=="Kosovo"
+	replace iso = "COD" if country=="Congo, Dem. Rep."
+	replace iso = "TLS" if country=="Timor-Leste"
+	replace iso = "PSE" if country=="West Bank and Gaza"
+save "$output\ICTDGRDtax.dta", replace
 
 *Mike Crosswell's  Strategic Indicators (USAID) 
 
@@ -536,6 +545,10 @@
 			drop if year>2013
 		merge m:1 year using "$output\CPI.dta", nogen
 		merge m:1 ctrycode_iso using "$output\fragility.dta", nogen
+		merge 1:1 iso year using "$output\ICTDGRDtax.dta", ///
+			keepusing(country resource_taxes nresource_tax_ex_sc nresource_tax_inc_sc resource_nontax nresource_nontax grants social_contrib)
+			drop if _merge==2 //remove high income countries
+			drop _merge
 
 	*create one country name
 		gen ctry = ctry_wb
@@ -740,36 +753,28 @@ bob
 			preserve
 			qui: drop if year==2013 //limited flow observations for 2013
 			qui: drop if year<`pdstart'
-			qui: by ctry: egen complete = min(full)
-			qui: lab val complete yn
-			qui: sum complete if year==2012 & complete==2
+			qui: by ctry: egen bookends = min(full) if inlist(year, `pdstart', 2012) // do countries have a full set of flows in 2000 and 2012?
+			qui: lab val bookends yn
+			qui: sum bookends if year==2012 & bookends==2 & ldc==2
 			if `pdstart'==1980 di "     How many countries have full datasets with different starting years?" ///
 				_newline "       YEAR      # COUNTRIES"
 			di "       `pdstart'            `r(N)'"
 			restore
 			}
 			*end
-			
-	*** Starting in 1997 would give us a set of 80 countries and 15 years ***
-		keep if year>=1997 & year<=2012 
-		by ctry: egen complete = min(full)
-		keep if complete==2 
-		drop full complete
-		tab ctry
-		bysort reg_wb: tab ctry
 	*/
 	
 	/* identify all countries that have the same start and end year and
 		interpolate any missing values in between */
-		by ctry: egen bookends = min(full) if inlist(year, 2000, 2012) // do countries have a full set of flows in 2000 and 2012?
+		by ctry: egen bookends = min(full) if inlist(year, 1995, 2012) // do countries have a full set of flows in 2000 and 2012?
 		by ctry: egen include = min(bookends) // project bookends onto rest of years for country
 			lab val bookends include yn
 		
 	*keep countries that have observations at both ends of range 
 		keep if include==2
-		keep if year>=2000 & year<=2012
-		tab ctry if year==2000 //86 countries in constant sample
-		bysort ldc: sum ctry if year==2000
+		keep if year>=1995 & year<=2012
+		tab ctry if year==2012 //86 countries in constant sample
+		bysort ldc: sum ctry if year==2012
 	
 	*interpolate between endpoints
 		sort ctry year
@@ -811,13 +816,13 @@ bob
 						gen pc_`f'_`t' = epol_`f'/population
 						lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
 						* base for deflator
-							qui: sum pc_`f'_`t' if year==2000
+							qui: sum pc_`f'_`t' if year==1995
 							global pcnombase_`f'_`t' = `r(mean)'
 					* real flows, total
 						gen real_`f'_`t' = epol_`f'/cpi_d
 						lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
 						* base for deflator
-							qui: sum real_`f'_`t' if year==2000
+							qui: sum real_`f'_`t' if year==1995
 							global realbase_`f'_`t' = `r(mean)'
 					* real flows per capita
 						gen realpc_`f'_`t' = real_`f'_`t'/population
@@ -828,9 +833,9 @@ bob
 					}
 					*end	
 								
-			*create real and nominal % changes with a base of 2000 per capita
+			*create real and nominal % changes with a base of 1995 per capita
 				foreach f in official private remittances{
-					qui: sum epol_`f' if year==2000
+					qui: sum epol_`f' if year==1995
 						global nombase_`f'_`t' = `r(mean)'
 					gen compn_`f'_`t' = epol_`f' * (${pcnombase_`f'_`t'}/${nombase_`f'_`t'})
 					gen compr_`f'_`t' = real_`f'_`t' * (${pcnombase_`f'_`t'}/${realbase_`f'_`t'})
