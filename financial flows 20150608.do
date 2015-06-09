@@ -44,7 +44,7 @@
 	cd "$projectpath"
 	
 * Run a macro to set up study folder
-	* Choose the pFolder as the name of your project
+	* Name the file path below
 	local pFolder FinancingFlows
 	foreach dir in `pFolder' {
 		confirmdir "`dir'"
@@ -53,7 +53,7 @@
 			display in yellow "Project directory named: `dir' created"
 			}
 		else disp as error "`dir' already exists, not created."
-		cd "$projectpath/`dir'"
+		cd "$projectpath\`dir'"
 		}
 	* end
 
@@ -71,6 +71,7 @@
 	*end
 *Set up global file paths located within project path
 	*these folders must exist in the parent folder
+	global projectpath `c(pwd)'
 	global data "$projectpath\RawData\"
 	global output "$projectpath\StataOutput\"
 	global graph "$projectpath\StataFigures\"
@@ -947,7 +948,7 @@ bob
 
 *Other Developing countries (non-LDCs)
 	
-	use "$output\financialflows.dta", clear	
+	use "$output/financialflows.dta", clear	
 	
 	*collapse
 		collapse (sum) oda oof private remittances epol_taxrev if ldc!=2, by(year) //includes regions (missing)
