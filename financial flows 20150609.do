@@ -7,7 +7,8 @@
 **   Last Updated 6/9   **
 **************************
 
-/*//////////////////////////////////////////////////////////////////////////////
+/*
+////////////////////////////////////////////////////////////////////////////////
   
   Outline
 	- SET DIRECTORIES
@@ -26,8 +27,9 @@
 	- UNCTAD
 	- OECD
 	- IMF
-	
-*///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////	
+*/
+
 
 ********************************************************************************
 ********************************************************************************
@@ -281,7 +283,7 @@
 			lab def yrlyinclvl 1 "Lower income" 2 " Lower middle income" ///
 				3 "Upper middle income" 4 "High income"
 			lab val yrlyinclvl yrlyinclvl
-		drop lowermid_l lowermid_u uppermid_u ctrycode_iso
+		drop lowermid_l lowermid_u uppermid_u
 		
 	*add source data
 		ds year ctrycode_iso, not
@@ -478,9 +480,9 @@ use "$data\ICTDGRDmerged_edited.dta", clear
 	replace iso = "COD" if country=="Congo, Dem. Rep."
 	replace iso = "TLS" if country=="Timor-Leste"
 	replace iso = "PSE" if country=="West Bank and Gaza"
-	
+	rename  iso ctrycode_iso
 	*add source data
-		ds year iso, not
+		ds year ctrycode_iso, not
 		foreach v of varlist `r(varlist)'{
 			note `v': Source: ICTDGRD (June 8, 2015)
 			}
@@ -553,8 +555,8 @@ save "$output\ICTDGRDtax.dta", replace
 			drop if year>2013
 		merge m:1 year using "$output\CPI.dta", nogen
 		merge m:1 ctrycode_iso using "$output\fragility.dta", nogen
-		merge 1:1 iso year using "$output\ICTDGRDtax.dta", ///
-			keepusing(country resource_taxes nresource_tax_ex_sc nresource_tax_inc_sc resource_nontax nresource_nontax grants social_contrib)
+		merge 1:1 ctrycode_iso year using "$output\ICTDGRDtax.dta", ///
+			keepusing(resource_taxes nresource_tax_ex_sc nresource_tax_inc_sc resource_nontax nresource_nontax grants social_contrib)
 			drop if _merge==2 //remove high income countries
 			drop _merge
 
@@ -631,8 +633,6 @@ save "$output\ICTDGRDtax.dta", replace
 		compress
 		save "$output\financialflows.dta", replace	
 
-bob
-
 ********************************************************************************
 ********************************************************************************
 		
@@ -642,24 +642,21 @@ bob
 	*list of countries
 		tab ctry
 	*how many observations for each flow?
-		table year, c(n oda n oof n remittances n private n genrev)
+		table year, c(n oda n oof n remittances n private)
 	*how many of the flow variables do countries have data for each year?
-		egen nonmissing = rownonmiss(oda oof remittances private genrev)
+		egen nonmissing = rownonmiss(oda oof remittances private)
 		recode nonmissing 0 = .
 		qui: tab nonmissing, gen(obs)
-		foreach v of varlist obs1-obs5{
+		foreach v of varlist obs1-obs4{
 			recode `v' 0 = .
 			}
 			*end
-		table year, c(n obs1 n obs2 n obs3 n obs4 n obs5)
+		table year, c(n obs1 n obs2 n obs3 n obs4)
+		drop obs*
 	*sum of flows by year (millions USD)
-		table year, c(sum oda sum oof sum remittances sum private sum genrev)
+		table year, c(sum oda sum oof sum remittances sum private)
 	*sum of flows by year for 2000 & 2012 (millions USD)
-		table year if inlist(year, 2000, 2012), c(sum oda sum oof sum remittances sum private sum genrev)
-	
-	
-bob
-
+		table year if inlist(year, 2000, 2012), c(sum oda sum oof sum remittances sum private)
 
 ********************************************************************************
 ********************************************************************************
@@ -755,7 +752,7 @@ bob
 			lab val full yn
 			*observation per year
 				tab year if full==2
-	/*		
+			
 	*identify countries with all flows for full time period
 		foreach pdstart of numlist 1980/2005{
 			preserve
@@ -763,14 +760,13 @@ bob
 			qui: drop if year<`pdstart'
 			qui: by ctry: egen bookends = min(full) if inlist(year, `pdstart', 2012) // do countries have a full set of flows in 2000 and 2012?
 			qui: lab val bookends yn
-			qui: sum bookends if year==2012 & bookends==2 & ldc==2
+			qui: sum bookends if year==2012 & bookends==2
 			if `pdstart'==1980 di "     How many countries have full datasets with different starting years?" ///
 				_newline "       YEAR      # COUNTRIES"
 			di "       `pdstart'            `r(N)'"
 			restore
 			}
 			*end
-	*/
 	
 	/* identify all countries that have the same start and end year and
 		interpolate any missing values in between */
@@ -928,6 +924,8 @@ bob
 			lab var priv "Private Flows"
 		gen rev = priv + epol_taxrev
 			lab var rev "Tax Revenues"
+	
+		
 	*export
 		export excel using "$excel\FFgraphs.xlsx", sheet("LDCs") firstrow(variables) sheetreplace
 		
@@ -980,6 +978,7 @@ bob
 			lab var priv "Private Flows"
 		gen rev = priv + epol_taxrev
 			lab var rev "Tax Revenues"
+	
 	*export
 		export excel using "$excel\FFgraphs.xlsx", sheet("Other") firstrow(variables) sheetreplace
 		
@@ -1205,4 +1204,72 @@ bob
 			note("Note: Total will be greater than 100 percent due to working with annual country average shares" ///
 				"Source: World Bank WDI") 
 		graph export "$graph/ff_revshares.pdf", replace
+
+********************************************************************************
+********************************************************************************
+
+** EXPORT DATA FOR FIGURES **
+
+*1b
+	use "$output\financialflows.dta", clear	
+
+	*generate real flows
+		foreach f in oda oof  private remittances{
+			replace `f' = `f'/1000 //convert to billions
+			gen real_`f' = `f'/cpi_d // in billions
+	
+			}	
+			*end
+
+	*collapse
+		collapse (sum) oda oof remittances private real_* population, by(year)
+	
+	* generate offical
+		gen official = oda + oof
+			lab var official "ODA and other offical flows"
+		gen real_official = real_oda + real_oof
+	* generate real per capita
+		foreach f in official private remittances{
+			gen realpc_`f' = (real_`f'*1000)/population 
+			}
+			*end
+			
+	*export
+		export excel using "$excel\FFgraphsforPaper.xlsx", sheet("TotDevReal") firstrow(variables) sheetreplace
+
+* Fragility
+
+	use "$output\financialflows_const.dta", clear	
+	*fragile measure
+		gen fragile = .
+			note fragile: PPC Fragility based on CPIA 2014 and KK Stability
+		replace fragile=2 if ppcfrag=="1"
+		replace fragile=1 if ppcfrag=="0"
+		lab val fragile yn
+		tab ctry if fragile==2
+		tab fragile if year==2012, m
 		
+		
+	local count = 1
+	foreach x in "fragile==2" "fragile!=2"{
+		preserve
+		*collapse
+			collapse (sum) oda oof remittances private population if `x', by(year)
+		
+		*generate offical flows
+			gen official = oda + oof
+				lab var official "ODA and other offical flows"
+		
+		*generate real flows
+			foreach f in oda oof official private remittances{
+				replace `f' = `f'/1000 //convert to billions
+				}	
+				*end
+		*export
+			local ffex `"export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+			if `count' == 1 `ffex' sheet("Fragile")
+			else `ffex' sheet("NonFragile")
+		restore
+		local count = `count' + 1 
+			}
+			*end
