@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/10   **
+**   Last Updated 6/11   **
 **************************
 
 /*
@@ -20,7 +20,9 @@
 	- FIGURES
 	- IDENTIFY CONSTANT SAMPLE
 	- CONSTANT SAMPLE EXPORTS
-	- REVENUE SHARES
+	- REVENUE SHARES (WDI)
+	- EXPORT ADDITIONAL DATA FOR FIGURES
+	- 
 
  Data sources
 	- World Bank WDI
@@ -474,13 +476,27 @@
 	
 *ICTDGRD - Government Tax Revenue 
 * Source: http://www.ictd.ac/en/about-ictd-government-revenue-dataset#Dataset
-use "$data\ICTDGRDmerged_edited.dta", clear
+	
+	use "$data\ICTDGRDmerged_edited.dta", clear
+	
 	*rename iso codes for merging
-	replace iso = "na_ode_iso115" if country=="Kosovo"
-	replace iso = "COD" if country=="Congo, Dem. Rep."
-	replace iso = "TLS" if country=="Timor-Leste"
-	replace iso = "PSE" if country=="West Bank and Gaza"
-	rename  iso ctrycode_iso
+		replace iso = "na_ode_iso115" if country=="Kosovo"
+		replace iso = "COD" if country=="Congo, Dem. Rep."
+		replace iso = "TLS" if country=="Timor-Leste"
+		replace iso = "PSE" if country=="West Bank and Gaza"
+		rename  iso ctrycode_iso
+	*keep only some of the variables
+		keep year ctrycode tot_resource_rev tot_nresource_rev_inc_sc ///
+			resource_taxes	nresource_tax_inc_sc nresource_tax_ex_sc ///
+			nresource_nontax resource_nontax social_contrib grants
+			
+	*add "(% of GDP)" to label
+		foreach v of varlist rev_inc_sc - trade{
+			local label : variable label `v'		
+			lab var `v' "`label' (% of GDP)"
+			}
+			*end
+			
 	*add source data
 		ds year ctrycode_iso, not
 		foreach v of varlist `r(varlist)'{
@@ -488,16 +504,38 @@ use "$data\ICTDGRDmerged_edited.dta", clear
 			}
 			*end
 				
-save "$output\ICTDGRDtax.dta", replace
+	save "$output\ICTDGRDtax.dta", replace
 
 *Mike Crosswell's  Strategic Indicators (USAID) 
 
 	import excel "$data\Strategic Indicators 2015_soc.xlsx", sheet("Export") firstrow clear
-		keep country iso kkstab04 - oecdfrag15
+		keep country iso cpia* kkstab04 - oecdfrag15
 		rename iso ctrycode_iso
 		drop if ctrycode_iso==""
-
+	*destring variables
+		destring cpia06-kkstab11 ppcfrag-fsindex09 fsindex10-fsindextrend, replace ignore("NA") 
+		lab def yn 1 "No" 2 "Yes"
+		recode ppcfrag (1 = 2) (0 = 1)
+		lab val ppcfrag yn
+		foreach v of varlist cfsibrd oecdfrag13-oecdfrag15{
+			replace `v' = "1" if `v'=="No"
+			replace `v' = "2" if `v'=="Yes"
+			destring `v', replace
+			lab val `v' yn
+		}
+		*end
+		
+		
 	*label fragility variables
+		lab var cpia06 "CPIA 2006 (2005)"
+		lab var cpia07 "CPIA 2007 (2006)"
+		lab var cpia08 "CPIA 2008 (2007)"
+		lab var cpia09 "CPIA 2009 (2008)"
+		lab var cpia10 "CPIA 2010 (2009)"
+		lab var cpia11 "CPIA 2011 (2010)"
+		lab var cpia12 "CPIA 2012 (2011)"
+		lab var cpia13 "CPIA 2013 (2012)"
+		lab var cpia14 "CPIA 2014 (2013)"
 		lab var kkstab04 "KK Instability 2004"
 		lab var kkstab05 "KK Instability 2005"
 		lab var kkstab06 "KK Instability 2006"
@@ -554,9 +592,9 @@ save "$output\ICTDGRDtax.dta", replace
 			drop _merge
 			drop if year>2013
 		merge m:1 year using "$output\CPI.dta", nogen
-		merge m:1 ctrycode_iso using "$output\fragility.dta", nogen
-		merge 1:1 ctrycode_iso year using "$output\ICTDGRDtax.dta", ///
-			keepusing(resource_taxes nresource_tax_ex_sc nresource_tax_inc_sc resource_nontax nresource_nontax grants social_contrib)
+		merge m:1 ctrycode_iso using "$output\fragility.dta", nogen ///
+			keepusing(cpia14)
+		merge 1:1 ctrycode_iso year using "$output\ICTDGRDtax.dta"
 			drop if _merge==2 //remove high income countries
 			drop _merge
 
@@ -599,7 +637,7 @@ save "$output\ICTDGRDtax.dta", replace
 	* drop UNCTAD remittances, source is World Bank
 		drop remittances_unctad
 
-	*drop regions (from WB WDI) and developed countries	
+	*drop developed countries	
 		replace devstatus=3 if inlist(ctry, "Bermuda", "Croatia", "Cyprus", "Gibralter", "Kosovo", "Malta")
 		replace devstatus=1 if iso=="RUS"
 		replace devstatus=4 if regexm(ctry, " regional") // denotes regional flows of development aid
@@ -614,11 +652,34 @@ save "$output\ICTDGRDtax.dta", replace
 			lab var rev_nontax "Non-tax revenue (general govt), millions USD"
 		replace genrev = (genrev/exchange)*1000
 			lab var genrev "Overall revenue (general govt), millions USD"
+	
+	*add fragility measure (those in the top quartile)
+		*hist cpia14 if year==2013, freq bin(15)
+		sum cpia14, d
+		list ctry cpia14 if cpia14>=`r(p75)' & cpia14!=. & year==2013
+		gen fragile = .
+			note fragile: Fragility based on CPIA 2014 (World Bank)
+			replace fragile=1 if cpia14!=.
+			replace fragile=2 if cpia14>=`r(p75)' & cpia14!=.
+			lab val fragile yn
+			lab var fragile "Fragile Country (2014)"
+		tab fragile if year==2013,m
+			
 	*compare revenue observations
 		describe taxrev rev_tax genrev
 		notes list taxrev rev_tax genrev //sources
 		table year, c(n taxrev n rev_tax n genrev)
 		table ctry year if year>1989, c(n taxrev)
+		
+	*convert ICTDGRD tax revenue to current dollars
+		foreach r of varlist tot_resource_rev tot_nresource_rev_inc_sc resource_taxes nresource_tax_inc_sc nresource_tax_ex_sc nresource_nontax resource_nontax social_contrib grants{
+			gen trv_`r' = (`r'/100)*gdp
+			local varlabel : var label `r'
+			local newlabel : subinstr local varlabel "(% of GDP)" ", millions current USD", all
+			label variable trv_`r' "`newlabel'"
+			}
+			*end
+
 	*set as panel dataset
 		encode ctry, gen(ctry2)
 			destring ctry, replace force
@@ -626,6 +687,7 @@ save "$output\ICTDGRDtax.dta", replace
 			lab val ctry ctry2
 			drop ctry2
 		xtset ctry year
+		
 	*drop unused variables
 		drop exchange genrev_pctgdp gdp_weo gdp_usd_weo
 
@@ -748,7 +810,6 @@ save "$output\ICTDGRDtax.dta", replace
 			replace full = 1 if flowmisscount!=0
 				drop flowmisscount
 			lab var full "Country has all flows for given year"
-			lab def yn 1 "No" 2 "Yes"
 			lab val full yn
 			*observation per year
 				tab year if full==2
@@ -1208,7 +1269,7 @@ bob
 ********************************************************************************
 ********************************************************************************
 
-** EXPORT DATA FOR FIGURES **
+** EXPORT ADDITIONAL DATA FOR FIGURES **
 
 *1b
 	use "$output\financialflows.dta", clear	
@@ -1240,16 +1301,7 @@ bob
 * Fragility
 
 	use "$output\financialflows_const.dta", clear	
-	*fragile measure
-		gen fragile = .
-			note fragile: PPC Fragility based on CPIA 2014 and KK Stability
-		replace fragile=2 if ppcfrag=="1"
-		replace fragile=1 if ppcfrag=="0"
-		lab val fragile yn
-		tab ctry if fragile==2
-		tab fragile if year==2012, m
-		
-		
+	
 	local count = 1
 	foreach x in "fragile==2" "fragile!=2"{
 		preserve
@@ -1273,3 +1325,60 @@ bob
 		local count = `count' + 1 
 			}
 			*end
+
+*ICTDGRD Tax Revenue
+	
+	use "$output\financialflows.dta", clear
+	
+	*data availablity
+		table year, c(n tot_resource_rev n tot_nresource_rev_inc_sc n social_contrib n grants)
+	*countries where resource revenue is great than non resource revenue
+		tab ctry if ///
+			trv_tot_resource_rev>trv_tot_nresource_rev_inc_sc & ///
+			trv_tot_resource_rev!=. & ///
+			year>=1995
+	*countries, years and amts where resource revenue is great than non resource revenue
+		tab ctry if ///
+		list ctry year  tot_resource_rev tot_nresource_rev_inc_sc if ///
+			trv_tot_resource_rev>trv_tot_nresource_rev_inc_sc & ///
+			trv_tot_resource_rev!=. & ///
+			year>=1995
+	*gen resource dependence
+		gen dep = .
+			replace dep = 1 if tot_resource_rev!=. & tot_nresource_rev_inc_sc!=.
+			replace dep = 2 if (year>=2005) & (tot_resource_rev>tot_nresource_rev_inc_sc)
+		by ctry: egen resdep = max(dep)
+			lab val resdep yn
+			lab var resdep "Resource Dependent (in past 5 years)"
+			note resdep: Indicated where country's resource revenue exceeded ///
+				nonresource revenue in last five years of sample (2005-2010) ///
+				at least once
+		drop dep
+		
+	*Financial flows total (to compare to revenue) 
+		* only countries with revenue
+		*egen id = group(ctry year) 
+		*bysort id: egen tot_flows = total(oda + oof + remittances + private) if (trv_tot_resource_rev!=. | trv_tot_nresource_rev_inc_sc!=.)
+		
+	*export		
+		local count = 1
+		foreach x in "resdep==2" "resdep!=2"{
+		preserve
+		*collapse
+			collapse (sum) trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants totflows if `x', by(year)
+		
+		*generate real flows
+			foreach f in trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants totflows{
+				replace `f' = `f'/1000 //convert to billions
+				}	
+				*end
+				
+		*export
+			local ffex `"export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+			if `count' == 1 `ffex' sheet("ResourceDep")
+			else `ffex' sheet("NonResDep")
+		restore
+		local count = `count' + 1 
+			}
+			*end
+		
