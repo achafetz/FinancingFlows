@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/11   **
+**   Last Updated 6/12  **
 **************************
 
 /*
@@ -1357,8 +1357,9 @@ bob
 		
 	*Financial flows total (to compare to revenue) 
 		* only countries with revenue
-		*egen id = group(ctry year) 
-		*bysort id: egen tot_flows = total(oda + oof + remittances + private) if (trv_tot_resource_rev!=. | trv_tot_nresource_rev_inc_sc!=.)
+		egen id = group(ctry year) 
+		bysort id: egen tot_flows = total(oda + oof + remittances + private) if trv_tot_nresource_rev_inc_sc!=.
+		drop id
 		
 	*export		
 		local count = 1
