@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/12  **
+**   Last Updated 6/15  **
 **************************
 
 /*
@@ -524,8 +524,7 @@
 			lab val `v' yn
 		}
 		*end
-		
-		
+			
 	*label fragility variables
 		lab var cpia06 "CPIA 2006 (2005)"
 		lab var cpia07 "CPIA 2007 (2006)"
@@ -572,7 +571,6 @@
 			save "$output\fragility.dta", replace
 		
 
-	
 ********************************************************************************
 ********************************************************************************
 		
@@ -679,7 +677,18 @@
 			label variable trv_`r' "`newlabel'"
 			}
 			*end
-
+	* create resouce dependence variable
+		gen dep = .
+			replace dep = 1 if tot_resource_rev!=. & tot_nresource_rev_inc_sc!=.
+			replace dep = 2 if (year>=2005) & (tot_resource_rev>tot_nresource_rev_inc_sc)
+		by ctry: egen resdep = max(dep)
+			lab val resdep yn
+			lab var resdep "Resource Dependent (in past 5 years)"
+			note resdep: Indicated where country's resource revenue exceeded ///
+				nonresource revenue in last five years of sample (2005-2010) ///
+				at least once
+		drop dep
+	
 	*set as panel dataset
 		encode ctry, gen(ctry2)
 			destring ctry, replace force
@@ -1326,35 +1335,24 @@ bob
 			}
 			*end
 
-*ICTDGRD Tax Revenue
+*Resource Dependence
 	
 	use "$output\financialflows.dta", clear
 	
 	*data availablity
 		table year, c(n tot_resource_rev n tot_nresource_rev_inc_sc n social_contrib n grants)
+		
 	*countries where resource revenue is great than non resource revenue
 		tab ctry if ///
 			trv_tot_resource_rev>trv_tot_nresource_rev_inc_sc & ///
 			trv_tot_resource_rev!=. & ///
 			year>=1995
 	*countries, years and amts where resource revenue is great than non resource revenue
-		tab ctry if ///
 		list ctry year  tot_resource_rev tot_nresource_rev_inc_sc if ///
 			trv_tot_resource_rev>trv_tot_nresource_rev_inc_sc & ///
 			trv_tot_resource_rev!=. & ///
 			year>=1995
-	*gen resource dependence
-		gen dep = .
-			replace dep = 1 if tot_resource_rev!=. & tot_nresource_rev_inc_sc!=.
-			replace dep = 2 if (year>=2005) & (tot_resource_rev>tot_nresource_rev_inc_sc)
-		by ctry: egen resdep = max(dep)
-			lab val resdep yn
-			lab var resdep "Resource Dependent (in past 5 years)"
-			note resdep: Indicated where country's resource revenue exceeded ///
-				nonresource revenue in last five years of sample (2005-2010) ///
-				at least once
-		drop dep
-		
+
 	*Financial flows total (to compare to revenue) 
 		* only countries with revenue
 		egen id = group(ctry year) 
@@ -1366,10 +1364,10 @@ bob
 		foreach x in "resdep==2" "resdep!=2"{
 		preserve
 		*collapse
-			collapse (sum) trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants totflows if `x', by(year)
+			collapse (sum) trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants tot_flows if `x', by(year)
 		
 		*generate real flows
-			foreach f in trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants totflows{
+			foreach f in trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib trv_grants tot_flows{
 				replace `f' = `f'/1000 //convert to billions
 				}	
 				*end
@@ -1382,4 +1380,150 @@ bob
 		local count = `count' + 1 
 			}
 			*end
+
+	
+*Resource Revenue Constant Sample
+	*indentify a constant sample for resource dependence
+	*(full obseravtions for all years and flows)
+	
+		table year, c(n trv_tot_resource_rev n trv_tot_nresource_rev_inc_sc n trv_social_contrib)
 		
+		*identify country with all flows in a given year
+			egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
+				gen full = 2 if flowmisscount==0
+				replace full = 1 if flowmisscount!=0
+					drop flowmisscount
+				lab var full "Country has all flows for given year"
+				lab val full yn
+				*observation per year
+					tab year if full==2
+				
+		*identify countries with all flows for full time period
+			foreach pdstart of numlist 1980/2010{
+				preserve
+				qui: drop if year>2010 //no observations after 2010
+				qui: drop if year<`pdstart'
+				qui: bysort ctry: egen bookends = min(full) if inlist(year, `pdstart', 2010) // do countries have a full set of flows in 2000 and 2012?
+				qui: lab val bookends yn
+				qui: sum bookends if year==2010 & bookends==2
+				if `pdstart'==1980 di "     How many countries have full datasets with different starting years?" ///
+					_newline "       YEAR      # COUNTRIES"
+				di "       `pdstart'            `r(N)'"
+				restore
+				}
+				*end
+				
+		/* identify all countries that have the same start and end year and
+		interpolate any missing values in between */
+		bysort ctry: egen bookends = min(full) if inlist(year, 2002, 2010) // do countries have a full set of flows in 2000 and 2010?
+		bysort ctry: egen include = min(bookends) // project bookends onto rest of years for country
+			lab val bookends include yn
+		
+		*keep countries that have observations at both ends of range 
+			keep if include==2
+			keep if year>=2002 & year<=2010
+			tab ctry if year==2010 //86 countries in constant sample
+			bysort ldc: sum ctry if year==2010
+			bysort resdep: sum ctry if year==2010
+		
+		*interpolate between endpoints
+			sort ctry year
+			rename trv_tot_nresource_rev_inc_sc trv_tot_nresource_rev
+			foreach v of varlist trv_tot_resource_rev trv_tot_nresource_rev trv_social_contrib trv_grants{
+				by ctry: ipolate `v' year, gen(epol_`v') epolate
+					local label : variable label `v'		
+					lab var epol_`v' "Extrapolated `label'"
+				}
+				*end
+		*drop extra variables	
+			drop full bookends include
+		
+		*Financial flows total (to compare to revenue) 
+		* only countries with revenue
+			drop tot_flows id
+			egen id = group(ctry year) 
+			bysort id: egen tot_flows = total(oda + oof + remittances + private) if epol_trv_tot_nresource_rev!=.
+			drop id
+		
+		*export		
+			local count = 1
+			foreach x in "resdep==2" "resdep!=2"{
+			preserve
+			*collapse
+				collapse (sum) epol_trv* tot_flows if `x', by(year)
+			
+			*generate real flows
+				foreach f in epol_trv_tot_resource_rev epol_trv_tot_nresource_rev epol_trv_social_contrib epol_trv_grants tot_flows{
+					replace `f' = `f'/1000 //convert to billions
+					}	
+					*end
+					
+			*export
+				local ffex `"export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				if `count' == 1 `ffex' sheet("ConstResDep")
+				else `ffex' sheet("ConstNonResDep")
+			restore
+			local count = `count' + 1 
+				}
+				*end
+
+				
+*Resource Revenue Average Resource Revenues (2008-2010)
+	
+	use "$output\financialflows.dta", clear
+
+	* indentify a constant sample for resource dependence
+	*(full obseravtions for all years and flows)
+	
+		table year, c(n trv_tot_resource_rev n trv_tot_nresource_rev_inc_sc n trv_social_contrib)
+		
+		*identify country with all flows in a given year
+			egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
+				gen full = 2 if flowmisscount==0
+				replace full = 1 if flowmisscount!=0
+					drop flowmisscount
+				lab var full "Country has all flows for given year"
+				lab val full yn
+				
+		/* identify all countries that have the same start and end year and
+		interpolate any missing values in between */
+		bysort ctry: egen bookends = min(full) if inlist(year, 2008, 2010) // do countries have a full set of flows in 2008 and 2010?
+		bysort ctry: egen include = min(bookends) // project bookends onto rest of years for country
+			lab val bookends include yn
+		
+		*keep countries that have observations at both ends of range 
+			keep if include==2
+			keep if year>=2008 & year<=2010
+			bysort resdep: tab ctry if year==2010 //15 countries in constant sample
+			bysort ldc: sum ctry if year==2010
+			bysort resdep: sum ctry if year==2010
+		
+		*interpolate between endpoints
+			sort ctry year
+			rename trv_tot_nresource_rev_inc_sc trv_tot_nresource_rev
+			foreach v of varlist trv_tot_resource_rev trv_tot_nresource_rev trv_social_contrib trv_grants{
+				by ctry: ipolate `v' year, gen(epol_`v') epolate
+					local label : variable label `v'		
+					lab var epol_`v' "Extrapolated `label'"
+				}
+				*end
+				
+		*drop extra variables	
+			drop full bookends include
+			
+	*avg pd between 2008-2010
+		drop if year<2008 | year>2010
+		local val epol_trv_tot_resource_rev epol_trv_tot_nresource_rev epol_trv_social_contrib epol_trv_grants
+		foreach f in `val' {
+			by ctry: egen avg_`f' = mean(`f')
+			lab var avg_`f' `"Avg `=proper("`f'")' Flows (2008-2010)"'
+			}
+			*end
+	*keep if year
+		keep if year==2010
+		
+	collapse (mean) avg_*, by(resdep)
+	
+	*export		
+		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep")
+
