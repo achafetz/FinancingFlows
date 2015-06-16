@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/15  **
+**   Last Updated 6/16  **
 **************************
 
 /*
@@ -858,6 +858,9 @@
 				lab var epol_`v' "Extrapolated `label'"
 			}
 			*end
+	*drop
+		drop full bookends include
+		
 	*save
 		save "$output\financialflows_const.dta", replace
 
@@ -873,10 +876,26 @@
 	foreach t in "sum" "mean"{
 		foreach x in "if ldc==2" "if ldc!=2" ""{
 			use "$output\financialflows_const.dta", clear
-			gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
-				lab var totflow "Total Financial Flows"
+			
+			*create total flow
+				qui: gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
+					lab var totflow "Total Financial Flows"
+			
 			di "locals: `t' & `x'"
 			
+			*country level average growth
+				*gen official
+					gen epol_official = epol_oda + epol_oof
+						lab var epol_official "ODA and other offical flows"
+				foreach f in epol_official epol_private epol_remittances{
+					qui: gen base95 = `f' if year==1995
+					bysort ctry: egen flowbase = min(base95)
+					qui: gen `f'_gr = (`f'/flowbase)-1
+					drop base95 flowbase
+					}
+					*end
+					drop epol_official
+				
 			*collapse
 				collapse (`t') oda oof private remittances epol_* totflow population (max) cpi_d `x', by(year)
 			
@@ -1148,7 +1167,7 @@ bob
 ********************************************************************************
 ********************************************************************************
 
-** REVENUE SHARES **
+** REVENUE SHARES (WDI) **
 
 	*open up wdi in stata
 		*ssc install wbopendata
@@ -1468,7 +1487,7 @@ bob
 				*end
 
 				
-*Resource Revenue Average Resource Revenues (2008-2010)
+*Resource Revenue Average, Aggregate Level (2008-2010)
 	
 	use "$output\financialflows.dta", clear
 
@@ -1527,3 +1546,147 @@ bob
 	*export		
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep")
 
+
+*Resource Revenue Average Resource Revenues with CONSTANT SAMPLE (2008-2010)
+	
+	use "$output\financialflows_const.dta", clear
+
+	* indentify a constant sample for resource dependence
+	*(full obseravtions for all years and flows)
+	
+		table year, c(n trv_tot_resource_rev n trv_tot_nresource_rev_inc_sc n trv_social_contrib)
+		
+		*identify country with all flows in a given year
+			egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
+				gen full = 2 if flowmisscount==0
+				replace full = 1 if flowmisscount!=0
+					drop flowmisscount
+				lab var full "Country has all flows for given year"
+				lab val full yn
+				
+		/* identify all countries that have the same start and end year and
+		interpolate any missing values in between */
+		bysort ctry: egen bookends = min(full) if inlist(year, 2008, 2010) // do countries have a full set of flows in 2008 and 2010?
+		bysort ctry: egen include = min(bookends) // project bookends onto rest of years for country
+			lab val bookends include yn
+		
+		*keep countries that have observations at both ends of range 
+			keep if include==2
+			keep if year>=2008 & year<=2010
+			bysort resdep: tab ctry if year==2010 //15 countries in constant sample
+			bysort ldc: sum ctry if year==2010
+			bysort resdep: sum ctry if year==2010
+		
+		*interpolate between endpoints
+			sort ctry year
+			rename trv_tot_nresource_rev_inc_sc trv_tot_nresource_rev
+			foreach v of varlist trv_tot_resource_rev trv_tot_nresource_rev trv_social_contrib trv_grants{
+				by ctry: ipolate `v' year, gen(epol_`v') epolate
+					local label : variable label `v'		
+					lab var epol_`v' "Extrapolated `label'"
+				}
+				*end
+				
+		*drop extra variables	
+			drop full bookends include
+			
+	*gen official
+		gen epol_official = epol_oda + epol_oof
+			lab var epol_official "ODA and other offical flows"
+			
+	*avg pd between 2008-2010
+		drop if year<2008 | year>2010
+		local tax epol_trv_tot_resource_rev epol_trv_tot_nresource_rev epol_trv_social_contrib epol_trv_grants
+		local flows epol_official epol_private epol_remittances
+		foreach f in `tax' `flows' {
+			by ctry: egen avg_`f' = mean(`f')
+			lab var avg_`f' `"Avg `=proper("`f'")' Flows (2008-2010)"'
+			}
+			*end
+	*keep if year
+		keep if year==2010
+		
+	collapse (mean) avg_*, by(resdep)
+	
+	*export		
+		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep")
+
+		
+*Country Level Average Growth Rates
+	
+	use "$output\financialflows_const.dta", clear
+			
+	*create total flow
+		qui: gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
+		lab var totflow "Total Financial Flows"
+	
+	*gen official
+		gen epol_official = epol_oda + epol_oof
+			lab var epol_official "ODA and other offical flows"		
+	
+	*create various flows
+		foreach f in official private remittances{
+			* per capita flows
+				gen pc_`f' = epol_`f'/population
+				lab var pc_`f' "`=proper("`f'")' Mean Flows per capita"
+			* real flows, total
+				gen real_`f' = epol_`f'/cpi_d
+				lab var real_`f' "`=proper("`f'")' Mean Flows in real terms"
+			* real flows per capita
+				gen realpc_`f' = real_`f'/population
+				lab var realpc_`f' "`=proper("`f'")' Mean Flows per capita in real terms"
+			}
+			*end
+			
+	*country level average growth
+		foreach t in "epol_" "real_" "realpc_"{
+			foreach f in official private remittances{
+				qui: gen base95 = `t'`f' if year==1995
+				bysort ctry: egen flowbase = min(base95)
+				qui: gen `t'`f'_gr = (`t'`f'/flowbase)-1
+				drop base95 flowbase
+				}
+			}
+			*end			
+			
+	*collapse
+		collapse (mean) *_gr , by(year)
+	
+	*export
+		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgCtryGR")
+		
+	use "$output\financialflows_const.dta", clear
+
+	* indentify a constant sample for resource dependence
+	*(full obseravtions for all years and flows)
+	
+		keep if year>=2006 & year<=2010
+		
+		table year, c(n trv_tot_resource_rev n trv_tot_nresource_rev_inc_sc n trv_social_contrib)
+		
+		tab resdep year, m // 25 countries, 4 resource dependent
+		
+		*identify country with all flows in a given year
+			*egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
+			*drop if flowmisscount==3 //no flows in a given year
+			*drop flowmisscount
+		
+		*gen official
+			gen epol_official = epol_oda + epol_oof
+			lab var epol_official "ODA and other offical flows"
+			
+		*identify averages
+			local rev trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib
+			local flows epol_official epol_private epol_remittances
+			/*foreach f in `rev' `flows'{
+				bysort ctry: egen avg_`f' = mean(`f')
+				}
+				*end
+			*/
+		
+		*collapse
+			collapse `rev' `flows' , by(resdep)
+			*collapse avg_*, by(resdep)
+			
+	*export		
+		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep2")
