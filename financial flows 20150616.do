@@ -23,7 +23,6 @@
 	- REVENUE SHARES (WDI)
 	- EXPORT ADDITIONAL DATA FOR FIGURES
 	- 
-
  Data sources
 	- World Bank WDI
 	- UNCTAD
@@ -1617,24 +1616,24 @@ bob
 	use "$output\financialflows_const.dta", clear
 			
 	*create total flow
-		qui: gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
-		lab var totflow "Total Financial Flows"
+		qui: gen epol_totflow = epol_oda + epol_oof + epol_private + epol_remittances
+		lab var epol_totflow "Total Financial Flows"
 	
 	*gen official
 		gen epol_official = epol_oda + epol_oof
 			lab var epol_official "ODA and other offical flows"		
 	
 	*create various flows
-		foreach f in official private remittances{
+		foreach f in official private remittances totflow{
 			* per capita flows
-				gen pc_`f' = epol_`f'/population
-				lab var pc_`f' "`=proper("`f'")' Mean Flows per capita"
+				*gen pc_`f' = epol_`f'/population
+				*lab var pc_`f' "`=proper("`f'")' Flows per capita"
 			* real flows, total
 				gen real_`f' = epol_`f'/cpi_d
-				lab var real_`f' "`=proper("`f'")' Mean Flows in real terms"
+				lab var real_`f' "`=proper("`f'")' Flows in real terms"
 			* real flows per capita
-				gen realpc_`f' = real_`f'/population
-				lab var realpc_`f' "`=proper("`f'")' Mean Flows per capita in real terms"
+				*gen realpc_`f' = real_`f'/population
+				*lab var realpc_`f' "`=proper("`f'")' Mean Flows per capita in real terms"
 			}
 			*end
 			
@@ -1654,6 +1653,10 @@ bob
 	
 	*export
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgCtryGR")
+
+
+
+*
 		
 	use "$output\financialflows_const.dta", clear
 
