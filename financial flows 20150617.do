@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/16  **
+**   Last Updated 6/17  **
 **************************
 
 /*
@@ -1611,7 +1611,7 @@ bob
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep")
 
 		
-*Country Level Average Growth Rates
+*Country Level and Aggregate Average Growth Rates
 	
 	use "$output\financialflows_const.dta", clear
 			
@@ -1624,7 +1624,7 @@ bob
 			lab var epol_official "ODA and other offical flows"		
 	
 	*create various flows
-		foreach f in official private remittances totflow{
+		foreach f in totflow official private remittances{
 			* per capita flows
 				*gen pc_`f' = epol_`f'/population
 				*lab var pc_`f' "`=proper("`f'")' Flows per capita"
@@ -1634,10 +1634,19 @@ bob
 			* real flows per capita
 				*gen realpc_`f' = real_`f'/population
 				*lab var realpc_`f' "`=proper("`f'")' Mean Flows per capita in real terms"
+			*share of total
+				gen sh_`f' = (real_`f'/real_totflow)*100
+				lab var sh_`f' "Country share of `=proper("`f'")' flows in real terms"
+			*growth rate
+				gen base95 = sh_`f' if year==1995
+				bysort ctry: egen flowbase = min(base95)
+				qui: gen sh_gr_`f' = (sh_`f'/flowbase)-1
+				lab var sh_gr_`f' "Country growth rate in share of `=proper("`f'")' flows since 1995"
+				drop base95 flowbase
 			}
 			*end
 			
-	*country level average growth
+	/*country level average growth
 		foreach t in "epol_" "real_" "realpc_"{
 			foreach f in official private remittances{
 				qui: gen base95 = `t'`f' if year==1995
@@ -1647,12 +1656,27 @@ bob
 				}
 			}
 			*end			
-			
-	*collapse
-		collapse (mean) *_gr , by(year)
+	*/
 	
+	*collapse
+		collapse (mean) real_* sh_gr_*, by(year)
+	
+	*create aggregate growth rate in share of avg
+		foreach f in totflow official private remittances{
+			*share of total
+				gen agsh_`f' = (real_`f'/real_totflow)*100
+				lab var agsh_`f' "Agg avg share of `=proper("`f'")' flows in real terms"
+			*growth rate
+				gen base95 = agsh_`f' if year==1995
+				egen flowbase = min(base95)
+				qui: gen agsh_gr_`f' = (agsh_`f'/flowbase)-1
+				lab var agsh_gr_`f' "Agg avg growth rate in share of `=proper("`f'")' flows since 1995"
+				drop base95 flowbase
+		}
+		*end
+		
 	*export
-		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgCtryGR")
+		export excel year *_gr_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgCtryGR")
 
 
 
