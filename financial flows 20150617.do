@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/17  **
+**   Last Updated 6/16  **
 **************************
 
 /*
@@ -886,17 +886,29 @@
 				*gen official
 					gen epol_official = epol_oda + epol_oof
 						lab var epol_official "ODA and other offical flows"
-				foreach f in epol_official epol_private epol_remittances{
-					qui: gen base95 = `f' if year==1995
-					bysort ctry: egen flowbase = min(base95)
-					qui: gen `f'_gr = (`f'/flowbase)-1
-					drop base95 flowbase
+					foreach f in epol_official epol_private epol_remittances{
+						qui: gen base95 = `f' if year==1995
+						bysort ctry: egen flowbase = min(base95)
+						qui: gen `f'_gr = (`f'/flowbase)-1
+						drop base95 flowbase
+						}
+						*end
+						
+			*country level unweighted average
+				*gen country shares
+					foreach f in official private remittances{
+						gen sh_`f' = epol_`f'/totflow
 					}
 					*end
-					drop epol_official
+				*gen country shares with tax
+						gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev)
+						gen epol_other = epol_official + epol_remittances + epol_private
+						gen sh_tax_other = epol_other/(totflow+epol_taxrev)
+						
+				drop epol_official
 				
 			*collapse
-				collapse (`t') oda oof private remittances epol_* totflow population (max) cpi_d `x', by(year)
+				collapse (`t') oda oof private remittances epol_* sh_* totflow population (max) cpi_d `x', by(year)
 			
 			*create offical flows variable
 				qui: gen epol_official = epol_oda + epol_oof
@@ -935,14 +947,14 @@
 				*end 
 					
 			*convert to billions (already millions)
-				qui: ds year share_* population* cpi_d pc_* realpc_* comp*, not
+				qui: ds year share_* sh_* population* cpi_d pc_* realpc_* comp*, not
 				foreach v in `r(varlist)'{
 					qui: replace `v' = `v'/1000
 					}
 					*end
 
 			*export
-				local ffex `"export excel year epol* pc* real* comp* share_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				local ffex `"export excel year epol* pc* real* comp* share_* sh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
 				if `count' == 1 `ffex' sheet("ConstantLDCs")
 				else if `count' == 2 `ffex' sheet("ConstantOther")
 				else if `count' == 3 `ffex' sheet("TotConstant")
@@ -1701,10 +1713,19 @@ bob
 		*gen official
 			gen epol_official = epol_oda + epol_oof
 			lab var epol_official "ODA and other offical flows"
+		*gen totflow
+			gen totflow = trv_tot_resource_rev + trv_tot_nresource_rev_inc_sc + epol_official + epol_remittances + epol_private
+			
+		*share of total at country level (unweighted average)
+			foreach f in trv_tot_resource_rev trv_tot_nresource_rev_inc_sc epol_official epol_remittances epol_private{
+				gen sh_`f' = `f'/totflow
+				}
+				*end
 			
 		*identify averages
 			local rev trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib
 			local flows epol_official epol_private epol_remittances
+			local shares sh_trv_tot_resource_rev sh_trv_tot_nresource_rev_inc_sc sh_epol_official sh_epol_remittances sh_epol_private
 			/*foreach f in `rev' `flows'{
 				bysort ctry: egen avg_`f' = mean(`f')
 				}
@@ -1712,8 +1733,11 @@ bob
 			*/
 		
 		*collapse
-			collapse `rev' `flows' , by(resdep)
+			collapse `rev' `flows' `shares', by(resdep)
 			*collapse avg_*, by(resdep)
 			
 	*export		
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep2")
+
+		
+		
