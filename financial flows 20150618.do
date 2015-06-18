@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/16  **
+**   Last Updated 6/18  **
 **************************
 
 /*
@@ -175,9 +175,9 @@
 
 	*transpose
 		gen id = _n
-		reshape long y, i(Dataforcalendaryear) j(year)
+		qui: reshape long y, i(Dataforcalendaryear) j(year)
 		drop Dataforcalendaryear
-		reshape wide y, i(year) j(id)
+		qui: reshape wide y, i(year) j(id)
 		drop y1
 		split y2, gen(mid) parse("-") destring ignore(",") force
 			rename mid1 lowermid_l
@@ -194,11 +194,13 @@
 		
 *WDI Data - Remittances, GDP, GDP (PPP), Exchange Rates, Tax Revenue
 	*http://data.worldbank.org/
-	
-	foreach f in GDP GDP_ppp Population Exchange Revenue_WDI CPI GNI_pc Remittances {
+	local count = 1
+	foreach f in GDP GDP_ppp Population Revenue_WDI Remittances Exchange CPI GNI_pc Rents_Oil Rents_Coal Rents_Forest Rents_Minr Rents_NGas Rents_TotNRes {
+		
+		di "Cleaning file: (`count') `f' "
 		
 		import excel "$data\`f'.xls", sheet("Data") cellrange(A3:BF251) firstrow clear
-	
+		
 		*label years
 			foreach year of var E-BF{
 					local l`year' : variable label `year'
@@ -216,44 +218,55 @@
 			gen id  = _n
 			
 		*reshape to have one column for year, country, and flow
-			reshape long y, i(id) j(year)
-			drop id
-			if "`f'" != "Exchange" replace y = y/1000000 //Convert to millions for consistency
+			qui: reshape long y, i(id) j(year)
+			qui: drop id
+			if `count' <= 5 qui: replace y = y/1000000 //Convert to millions for consistency
+			if `count' == 5 disp as error "Remaing variables will not be converted into millions"
 			rename y `=lower("`f'")'
+		*rename variables
 			if "`f'" == "GDP_ppp" lab var `=lower("`f'")' "GDP PPP, millions current international $"
 			else if "`f'" == "Population" lab var `=lower("`f'")' "Population, millions"
 			else if "`f'" == "Exchange" lab var `=lower("`f'")' "Official exchange rate (LCU per US$, period average)"
 			else if "`f'" == "Revenue_WDI" lab var `=lower("`f'")' "Tax Revenue (millions current LCU)"
 			else if "`f'" == "CPI" lab var `=lower("`f'")' "US CPI (2010 = 100)"
 			else if "`f'" == "GNI_pc" lab var `=lower("`f'")' "GNI per capita, Atlas method (current US$)"
+			else if "`f'" == "Rents_Oil" lab var `=lower("`f'")' "Oil rents, (% of GDP)"
+			else if "`f'" == "Rents_Oil" lab var `=lower("`f'")' "Oil rents, (% of GDP)"
+			else if "`f'" == "Rents_Coal" lab var `=lower("`f'")' "Coal rents, (% of GDP)"
+			else if "`f'" == "Rents_Forest" lab var `=lower("`f'")' "Forest rents, (% of GDP)"
+			else if "`f'" == "Rents_Minr" lab var `=lower("`f'")' "Mineral rents, (% of GDP)"
+			else if "`f'" == "Rents_NGas" lab var `=lower("`f'")' "Natural gas rents, (% of GDP)"
+			else if "`f'" == "Rents_TotNRes" lab var `=lower("`f'")' "Total natural resource rents, (% of GDP)"
 			else lab var `=lower("`f'")' "`f', millions current USD"
-			
 			
 		*sort for merging
 			sort ctry_wb year 
 		
 		*edit CPI (not merged into WDI; will merge in later with full country list)
 			if "`f'" == "CPI"{
-				replace cpi = cpi*1000000
-				gen cpi_d = cpi/100
+				qui: gen cpi_d = cpi/100
 					lab var cpi_d "US CPI Deflator (2010 base)"
-				keep if ctrycode_wb=="USA"
-				drop ctry_wb ctrycode_wb cpi
+				qui: keep if ctrycode_wb=="USA"
+				qui: drop ctry_wb ctrycode_wb cpi
 				note cpi_d: Source: World Bank WDI (June 2, 2015)
 			}
 		*save
-			save "$output\`f'.dta", replace	
+			qui: save "$output\`f'.dta", replace
+			
+		local count = `count' + 1
 		}
 		*end
 		
 
 	*merge WB data together, save and delete extra files
-		foreach f in GDP GDP_ppp Population Exchange GNI_pc Revenue_WDI{
-			merge 1:1 ctry_wb year using "$output\`f'.dta", nogen
+		use "$output\Remittances.dta", clear
+		foreach f in GDP GDP_ppp Population Revenue_WDI Exchange GNI_pc Rents_Oil Rents_Coal Rents_Forest Rents_Minr Rents_NGas Rents_TotNRes {
+			di "Merging file: `f'"
+			qui: merge 1:1 ctry_wb year using "$output\`f'.dta", nogen
 			}
 			*end
-		merge m:1 year using "$output\classlvls.dta", nogen //for yearly ctry classification
-		replace gni_pc = gni_pc * 1000000
+		qui: merge m:1 year using "$output\classlvls.dta", nogen //for yearly ctry classification
+			di "Merging file: classlvls"
 		
 	*clean
 		replace ctrycode_wb = "KSV" if ctry_wb=="Kosovo" 
@@ -266,7 +279,7 @@
 		merge m:1 ctrycode_wb using "$output\concordance.dta", keepusing(ctrycode_iso) // merge with concordance to get ISO code	
 			drop if _merge!=3
 			drop _merge
-		foreach f in GDP GDP_ppp Population Remittances Exchange GNI_pc Revenue_WDI classlvls{
+		foreach f in GDP GDP_ppp Population Revenue_WDI Remittances Exchange GNI_pc Rents_Oil Rents_Coal Rents_Forest Rents_Minr Rents_NGas Rents_TotNRes classlvls{
 			erase "$output\`f'.dta"
 			}
 			*end
@@ -285,11 +298,30 @@
 				3 "Upper middle income" 4 "High income"
 			lab val yrlyinclvl yrlyinclvl
 		drop lowermid_l lowermid_u uppermid_u
+	
+	*add resource dependence variable
+		ds rents_*
+		format `r(varlist)' %2.1f
+		/*table year, c(m rents_oil m rents_coal m rents_forest m rents_minr m rents_ngas)
+		table year, c(n rents_totnres m rents_totnres sem rents_totnres p75 rents_totnres max rents_totnres)
+		table year if rents_totnres>=20, c(n rents_totnres)
+		list ctry_wb rents_* if year==2000 & rents_totnres>=20, clean noobs
+		*/
+		gen nresdep = cond(rents_totnres>=20,2,1) if rents_totnres!=.
+			lab def yn 1 "No" 2 "Yes"
+			lab val nresdep yn
+			lab var nresdep "Natural Resource Dependence (Tot Natural Resource Rents >20% GDP)"
+			note nresdep: derived from WDI Total Natural Resource Rents (rents_totnres) where > 20% GDP
 		
 	*add source data
-		ds year ctrycode_iso, not
+		ds year ctrycode_iso rents_*, not
 		foreach v of varlist `r(varlist)'{
 			note `v': Source: World Bank WDI (May 21, 2015)
+			}
+			*end
+		ds rents_*
+		foreach v of varlist `r(varlist)'{
+			note `v': Source: World Bank WDI (June 18, 2015)
 			}
 			*end
 			
@@ -676,7 +708,7 @@
 			label variable trv_`r' "`newlabel'"
 			}
 			*end
-	* create resouce dependence variable
+	* create 2nd resouce dependence variable
 		gen dep = .
 			replace dep = 1 if tot_resource_rev!=. & tot_nresource_rev_inc_sc!=.
 			replace dep = 2 if (year>=2005) & (tot_resource_rev>tot_nresource_rev_inc_sc)
@@ -873,18 +905,18 @@
 	clear
 	local count = 1
 	foreach t in "sum" "mean"{
-		foreach x in "if ldc==2" "if ldc!=2" ""{
+		foreach x in "if ldc==2" "if ldc!=2" "if nresdep==2" "if nresdep!=2"""{
 			use "$output\financialflows_const.dta", clear
 			
 			*create total flow
 				qui: gen totflow = epol_oda + epol_oof + epol_private + epol_remittances
 					lab var totflow "Total Financial Flows"
 			
-			di "locals: `t' & `x'"
+			di "locals: (`count') `t' & `x'"
 			
 			*country level average growth
 				*gen official
-					gen epol_official = epol_oda + epol_oof
+					qui: gen epol_official = epol_oda + epol_oof
 						lab var epol_official "ODA and other offical flows"
 					foreach f in epol_official epol_private epol_remittances{
 						qui: gen base95 = `f' if year==1995
@@ -897,13 +929,13 @@
 			*country level unweighted average
 				*gen country shares
 					foreach f in official private remittances{
-						gen sh_`f' = epol_`f'/totflow
+						qui: gen sh_`f' = epol_`f'/totflow
 					}
 					*end
 				*gen country shares with tax
-						gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev)
-						gen epol_other = epol_official + epol_remittances + epol_private
-						gen sh_tax_other = epol_other/(totflow+epol_taxrev)
+					qui: gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev)
+					qui: gen epol_other = epol_official + epol_remittances + epol_private
+					qui: gen sh_tax_other = epol_other/(totflow+epol_taxrev)
 						
 				drop epol_official
 				
@@ -917,22 +949,22 @@
 			*create various flows
 				foreach f in official private remittances{
 					* per capita flows
-						gen pc_`f'_`t' = epol_`f'/population
+						qui: gen pc_`f'_`t' = epol_`f'/population
 						lab var pc_`f'_`t' "`=proper("`f'")' Flows per capita (`t')"
 						* base for deflator
 							qui: sum pc_`f'_`t' if year==1995
 							global pcnombase_`f'_`t' = `r(mean)'
 					* real flows, total
-						gen real_`f'_`t' = epol_`f'/cpi_d
+						qui: gen real_`f'_`t' = epol_`f'/cpi_d
 						lab var real_`f'_`t' "`=proper("`f'")' Flows in real terms (`t')"
 						* base for deflator
 							qui: sum real_`f'_`t' if year==1995
 							global realbase_`f'_`t' = `r(mean)'
 					* real flows per capita
-						gen realpc_`f'_`t' = real_`f'_`t'/population
+						qui: gen realpc_`f'_`t' = real_`f'_`t'/population
 						lab var realpc_`f'_`t' "`=proper("`f'")' Flows per capita in real terms (`t')"
 					* share of total
-						gen share_`f'_`t' = (epol_`f'/totflow)*100	
+						qui: gen share_`f'_`t' = (epol_`f'/totflow)*100	
 						lab var share_`f'_`t' "`=proper("`f'")' share of Total Flows (`t'), %"
 					}
 					*end	
@@ -941,8 +973,8 @@
 				foreach f in official private remittances{
 					qui: sum epol_`f' if year==1995
 						global nombase_`f'_`t' = `r(mean)'
-					gen compn_`f'_`t' = epol_`f' * (${pcnombase_`f'_`t'}/${nombase_`f'_`t'})
-					gen compr_`f'_`t' = real_`f'_`t' * (${pcnombase_`f'_`t'}/${realbase_`f'_`t'})
+					qui: gen compn_`f'_`t' = epol_`f' * (${pcnombase_`f'_`t'}/${nombase_`f'_`t'})
+					qui: gen compr_`f'_`t' = real_`f'_`t' * (${pcnombase_`f'_`t'}/${realbase_`f'_`t'})
 				}
 				*end 
 					
@@ -957,9 +989,13 @@
 				local ffex `"export excel year epol* pc* real* comp* share_* sh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
 				if `count' == 1 `ffex' sheet("ConstantLDCs")
 				else if `count' == 2 `ffex' sheet("ConstantOther")
-				else if `count' == 3 `ffex' sheet("TotConstant")
-				else if `count' == 4 `ffex' sheet("ConstavgLDCs")
-				else if `count' == 5 `ffex' sheet("ConstavgOther")
+				else if `count' == 3 `ffex' sheet("ConstResDep")
+				else if `count' == 4 `ffex' sheet("ConstNonResDep")
+				else if `count' == 5 `ffex' sheet("TotConstant")
+				else if `count' == 6 `ffex' sheet("ConstavgLDCs")
+				else if `count' == 7 `ffex' sheet("ConstavgOther")
+				else if `count' == 8 `ffex' sheet("ConstacgResDep")
+				else if `count' == 9 `ffex' sheet("ConstavgNonResDep")
 				else `ffex' sheet("TotConstavg") 
 			clear
 			local count = 1 + `count'
@@ -1692,7 +1728,7 @@ bob
 
 
 
-*
+* Real Avg Resource Dependence Flows (2006-2010)
 		
 	use "$output\financialflows_const.dta", clear
 
@@ -1703,7 +1739,7 @@ bob
 		
 		table year, c(n trv_tot_resource_rev n trv_tot_nresource_rev_inc_sc n trv_social_contrib)
 		
-		tab resdep year, m // 25 countries, 4 resource dependent
+		tab nresdep year, m // 78 countries (342 not, 48 yes over 5 years)
 		
 		*identify country with all flows in a given year
 			*egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
@@ -1713,19 +1749,35 @@ bob
 		*gen official
 			gen epol_official = epol_oda + epol_oof
 			lab var epol_official "ODA and other offical flows"
+			
 		*gen totflow
 			gen totflow = trv_tot_resource_rev + trv_tot_nresource_rev_inc_sc + epol_official + epol_remittances + epol_private
+		
+		*keep only full series (drop if rev data is missing)
+			drop if totflow==.
+			unique ctry, by(nresdep) gen(unique) //15 no, 9 yes
+				drop unique
+				
+		*rename (due to length)
+			rename trv_tot_nresource_rev_inc_sc trv_tot_nresource_rev
+			
+		*convert to real
+			foreach f in trv_tot_resource_rev trv_tot_nresource_rev epol_official epol_remittances epol_private totflow{
+				gen r_`f' = `f'/cpi_d
+			}
+			*end
 			
 		*share of total at country level (unweighted average)
-			foreach f in trv_tot_resource_rev trv_tot_nresource_rev_inc_sc epol_official epol_remittances epol_private{
-				gen sh_`f' = `f'/totflow
+			ds r_*
+			foreach f in `r(varlist)'{
+				gen sh_`f' = `f'/r_totflow
 				}
 				*end
 			
 		*identify averages
-			local rev trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib
-			local flows epol_official epol_private epol_remittances
-			local shares sh_trv_tot_resource_rev sh_trv_tot_nresource_rev_inc_sc sh_epol_official sh_epol_remittances sh_epol_private
+			local rev r_trv_tot_resource_rev r_trv_tot_nresource_rev
+			local flows r_epol_official r_epol_private r_epol_remittances
+			local shares sh_r_trv_tot_resource_rev sh_r_trv_tot_nresource_rev sh_r_epol_official sh_r_epol_remittances sh_r_epol_private
 			/*foreach f in `rev' `flows'{
 				bysort ctry: egen avg_`f' = mean(`f')
 				}
@@ -1733,11 +1785,61 @@ bob
 			*/
 		
 		*collapse
-			collapse `rev' `flows' `shares', by(resdep)
+			collapse `rev' `flows' `shares', by(nresdep)
 			*collapse avg_*, by(resdep)
 			
 	*export		
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstAvgResDep2")
 
+
+
+* Long Run Average Composition
+	
+	use "$output\financialflows_const.dta", clear
+
+	* indentify a constant sample for resource dependence
+	*(full obseravtions for all years and flows)
+	
+		keep if year>=2008 & year<=2012
 		
+		*identify country with all flows in a given year
+			*egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
+			*drop if flowmisscount==3 //no flows in a given year
+			*drop flowmisscount
+		
+		*gen official
+			gen epol_official = epol_oda + epol_oof
+			lab var epol_official "ODA and other offical flows"
+			
+		*gen totflow
+			gen totflow = epol_official + epol_remittances + epol_private
+		
+		*keep only full series (drop if rev data is missing)
+			drop if totflow==.
+
+		*convert to real & share of total at country level (unweighted average)
+			foreach f in totflow epol_official epol_remittances epol_private {
+				gen r_`f' = `f'/cpi_d
+				gen sh_r_`f' = `f'/r_totflow
+			}
+			*end
+
+		*identify averages
+			local flows r_epol_official r_epol_private r_epol_remittances
+			local shares sh_r_epol_official sh_r_epol_remittances sh_r_epol_private
+			/*foreach f in `rev' `flows'{
+				bysort ctry: egen avg_`f' = mean(`f')
+				}
+				*end
+			*/
+		
+		*collapse
+			collapse `flows' `shares', by(ldc)
+			*collapse avg_*, by(resdep)
+			
+	*export		
+		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstLAvgLDCs")
+
+		
+				
 		
