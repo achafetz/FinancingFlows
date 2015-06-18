@@ -307,11 +307,25 @@
 		table year if rents_totnres>=20, c(n rents_totnres)
 		list ctry_wb rents_* if year==2000 & rents_totnres>=20, clean noobs
 		*/
-		gen nresdep = cond(rents_totnres>=20,2,1) if rents_totnres!=.
+		bysort ctry_wb: egen avg_totnres = mean(rents_totnres) if year>=2008
+		/*hist avg_totnres, freq
+		graph box avg_totnres
+		sum avg_totnres, d
+		sum avg_totnres if avg_totnres>15 & year==2010
+		centile avg_totnres if year==2010, centile(10(10)90)
+		preserve
+			keep if year==2010
+			gsort - avg_totnres
+			list ctry_wb avg_totnres in 1/20, clean
+		restore
+		*/
+		gen nresdep_temp = cond(avg_totnres>=15 & avg_totnres!=.,2,1)
+		bysort ctry_wb: egen nresdep = max(nresdep_temp)
+			drop avg_totnres nresdep_temp
 			lab def yn 1 "No" 2 "Yes"
 			lab val nresdep yn
-			lab var nresdep "Natural Resource Dependence (Tot Natural Resource Rents >20% GDP)"
-			note nresdep: derived from WDI Total Natural Resource Rents (rents_totnres) where > 20% GDP
+			lab var nresdep "Natural Resource Dependence"
+			note nresdep: derived from WDI Total Natural Resource Rents where ctry avg between 2008-2012 is >=15% of GDP (top 20% of countries)
 		
 	*add source data
 		ds year ctrycode_iso rents_*, not
@@ -762,7 +776,7 @@
 
 ********************************************************************************
 ********************************************************************************
-
+/*
 ** INTERPOLATION/EXTRAPOLATION **
 
 	use "$output\financialflows.dta", clear
@@ -795,7 +809,7 @@
 			table year, c(n ctry n taxrev n epol_taxrev)
 	*save
 		save "$output\financialflows.dta", replace	
-
+*/
 ********************************************************************************
 ********************************************************************************
 
@@ -894,7 +908,29 @@
 		
 	*save
 		save "$output\financialflows_const.dta", replace
-
+		
+	*extrapolate tax revenue from WDI
+		*identify country with all flows in a given year
+				gen full = cond(taxrev!=.,2,1)
+				
+		/* identify all countries that have the same start and end year and
+			interpolate any missing values in between */
+			by ctry: egen bookends = min(full) if inlist(year, 1995, 2012) // do countries have a full set of flows in 2000 and 2012?
+			by ctry: egen include = min(bookends) // project bookends onto rest of years for country
+				lab val bookends include yn
+				tab include ldc if year==2010
+				tab include nresdep if year==2010
+		*interpolate between endpoints
+			sort ctry year
+			by ctry: ipolate taxrev year if include==2, gen(epol_taxrev)
+				local label : variable label taxrev		
+				lab var epol_taxrev "Extrapolated `label'"
+		
+		*drop
+			drop full bookends include
+	
+	*save
+		save "$output\financialflows_const.dta", replace
 
 ********************************************************************************
 ********************************************************************************
@@ -986,7 +1022,7 @@
 					*end
 
 			*export
-				local ffex `"export excel year epol* pc* real* comp* share_* sh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				local ffex `"qui: export excel year epol* pc* real* comp* share_* sh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
 				if `count' == 1 `ffex' sheet("ConstantLDCs")
 				else if `count' == 2 `ffex' sheet("ConstantOther")
 				else if `count' == 3 `ffex' sheet("ConstResDep")
