@@ -965,18 +965,21 @@
 			*country level unweighted average
 				*gen country shares
 					foreach f in official private remittances{
-						qui: gen sh_`f' = epol_`f'/totflow
+						qui: gen sh_`f' = epol_`f'/totflow  // share of total
+						qui: gen ysh_`f' = epol_`f'/gdp  // share of gdp
 					}
 					*end
 				*gen country shares with tax
-					qui: gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev)
+					qui: gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev) // tax share of total
 					qui: gen epol_other = epol_official + epol_remittances + epol_private
-					qui: gen sh_tax_other = epol_other/(totflow+epol_taxrev)
-						
+					qui: gen sh_tax_other = epol_other/(totflow+epol_taxrev) // other share of total
+					qui: gen ysh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev) // tax share of gdp
+					qui: gen ysh_tax_other = epol_other/(totflow+epol_taxrev)	//other share of gdp
+					
 				drop epol_official
 				
 			*collapse
-				collapse (`t') oda oof private remittances epol_* sh_* totflow population (max) cpi_d `x', by(year)
+				collapse (`t') oda oof private remittances epol_* sh_* ysh_* totflow population gdp (max) cpi_d `x', by(year)
 			
 			*create offical flows variable
 				qui: gen epol_official = epol_oda + epol_oof
@@ -1022,7 +1025,7 @@
 					*end
 
 			*export
-				local ffex `"qui: export excel year epol* pc* real* comp* share_* sh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				local ffex `"qui: export excel year epol* pc* real* comp* share_* sh_* ysh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
 				if `count' == 1 `ffex' sheet("ConstantLDCs")
 				else if `count' == 2 `ffex' sheet("ConstantOther")
 				else if `count' == 3 `ffex' sheet("ConstResDep")
