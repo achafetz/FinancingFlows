@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/18  **
+**   Last Updated 6/19  **
 **************************
 
 /*
@@ -79,6 +79,7 @@
 	global output "$projectpath\StataOutput\"
 	global graph "$projectpath\StataFigures\"
 	global excel "$projectpath\ExcelOutput\"
+	disp as error "If initial setup, move data to RawData folder."
 
 ********************************************************************************
 ********************************************************************************
@@ -321,7 +322,7 @@
 		*/
 		gen nresdep_temp = cond(avg_totnres>=15 & avg_totnres!=.,2,1)
 		bysort ctry_wb: egen nresdep = max(nresdep_temp)
-			drop avg_totnres nresdep_temp
+			drop nresdep_temp
 			lab def yn 1 "No" 2 "Yes"
 			lab val nresdep yn
 			lab var nresdep "Natural Resource Dependence"
@@ -614,7 +615,30 @@
 				*end
 		*save
 			save "$output\fragility.dta", replace
-		
+*IMF
+
+use "$data\IMFRevMobilization2015.dta", clear		
+	
+	*set as timeseries and fill
+		encode cname, gen(ctry)
+		tsset ctry year
+		tsfill, full
+	*merge using wbcode
+		rename wbcode ctrycode_wb
+		replace ctrycode_wb = "COD" if ctrycode_wb=="ZAR"
+
+		merge m:1 ctrycode_wb using "$output\concordance.dta", keepusing(ctrycode_iso) // merge with concordance to get ISO code	
+			keep if _merge==3
+			drop _merge
+	
+	*add source
+		ds cname ccode ctrycode_wb year *_src, not
+		foreach v of varlist `r(varlist)'{
+				note `v': Source: IMF Fiscal Affairs Department's Revenue Database (June 19, 2015)
+				}
+				*end
+	*save
+		save "$output\imfrev.dta", replace
 
 ********************************************************************************
 ********************************************************************************
@@ -628,6 +652,8 @@
 		merge 1:1 ctrycode_iso year using "$output\unctad.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\imf.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\weo.dta", nogen
+		merge 1:1 ctrycode_iso year using "$output\imfrev.dta", ///
+			keepusing(tax) nogen
 		merge m:1 ctrycode_iso using "$output\concordance.dta", ///
 			keepusing(reg_wb reg_usaid inclvl_wb landlockeddev_unctad ldc_unctad status_unctad)
 			replace _merge=3 if regexm(ctry_oecd, " regional") //preserve OECD regional flows
@@ -875,10 +901,15 @@
 			qui: drop if year<`pdstart'
 			qui: by ctry: egen bookends = min(full) if inlist(year, `pdstart', 2012) // do countries have a full set of flows in 2000 and 2012?
 			qui: lab val bookends yn
-			qui: sum bookends if year==2012 & bookends==2
-			if `pdstart'==1980 di "     How many countries have full datasets with different starting years?" ///
-				_newline "       YEAR      # COUNTRIES"
-			di "       `pdstart'            `r(N)'"
+						qui: sum bookends if year==2012 & bookends==2
+			local tot `r(N)'
+			qui: sum bookends if year==2012 & bookends==2 & ldc==2
+			local ldc `r(N)'
+			qui: sum bookends if year==2012 & bookends==2 & nresdep==2
+			local nresdep `r(N)'
+			if `pdstart'==1995 di "     How many countries have full datasets with different starting years?" ///
+				_newline "       YEAR        COUNTRIES       LDCs       Res Dep"
+			di "       `pdstart'            `tot'          `ldc'           `nresdep'"
 			restore
 			}
 			*end
@@ -911,7 +942,7 @@
 		
 	*extrapolate tax revenue from WDI
 		*identify country with all flows in a given year
-				gen full = cond(taxrev!=.,2,1)
+				gen full = cond(tax!=.,2,1)
 				
 		/* identify all countries that have the same start and end year and
 			interpolate any missing values in between */
@@ -922,9 +953,9 @@
 				tab include nresdep if year==2010
 		*interpolate between endpoints
 			sort ctry year
-			by ctry: ipolate taxrev year if include==2, gen(epol_taxrev)
-				local label : variable label taxrev		
-				lab var epol_taxrev "Extrapolated `label'"
+			by ctry: ipolate tax year if include==2, gen(epol_tax)
+				local label : variable label tax	
+				lab var epol_tax "Extrapolated `label'"
 		
 		*drop
 			drop full bookends include
@@ -1018,14 +1049,14 @@
 				*end 
 					
 			*convert to billions (already millions)
-				qui: ds year share_* sh_* population* cpi_d pc_* realpc_* comp*, not
+				qui: ds year share_* sh_* ysh_* population* cpi_d pc_* realpc_* comp*, not
 				foreach v in `r(varlist)'{
 					qui: replace `v' = `v'/1000
 					}
 					*end
 
 			*export
-				local ffex `"qui: export excel year epol* pc* real* comp* share_* sh_* ysh_* using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
+				local ffex `"qui: export excel year epol* pc* real* comp* share_* sh_* ysh_* gdp using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace"'
 				if `count' == 1 `ffex' sheet("ConstantLDCs")
 				else if `count' == 2 `ffex' sheet("ConstantOther")
 				else if `count' == 3 `ffex' sheet("ConstResDep")
