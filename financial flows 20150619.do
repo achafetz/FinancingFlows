@@ -626,7 +626,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 	*merge using wbcode
 		rename wbcode ctrycode_wb
 		replace ctrycode_wb = "COD" if ctrycode_wb=="ZAR"
-
+		rename tax taxr 
 		merge m:1 ctrycode_wb using "$output\concordance.dta", keepusing(ctrycode_iso) // merge with concordance to get ISO code	
 			keep if _merge==3
 			drop _merge
@@ -653,7 +653,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 		merge 1:1 ctrycode_iso year using "$output\imf.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\weo.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\imfrev.dta", ///
-			keepusing(tax) nogen
+			keepusing(taxr) nogen
 		merge m:1 ctrycode_iso using "$output\concordance.dta", ///
 			keepusing(reg_wb reg_usaid inclvl_wb landlockeddev_unctad ldc_unctad status_unctad)
 			replace _merge=3 if regexm(ctry_oecd, " regional") //preserve OECD regional flows
@@ -721,7 +721,10 @@ use "$data\IMFRevMobilization2015.dta", clear
 			lab var rev_nontax "Non-tax revenue (general govt), millions USD"
 		replace genrev = (genrev/exchange)*1000
 			lab var genrev "Overall revenue (general govt), millions USD"
-	
+		rename taxr taxr_pct
+		gen taxr = (taxr_pct/100)*gdp
+			lab var taxr "Total tax revenue (excluding social contributions), millions of USD"
+		
 	*add fragility measure (those in the top quartile)
 		*hist cpia14 if year==2013, freq bin(15)
 		sum cpia14, d
@@ -907,8 +910,8 @@ use "$data\IMFRevMobilization2015.dta", clear
 			local ldc `r(N)'
 			qui: sum bookends if year==2012 & bookends==2 & nresdep==2
 			local nresdep `r(N)'
-			if `pdstart'==1995 di "     How many countries have full datasets with different starting years?" ///
-				_newline "       YEAR        COUNTRIES       LDCs       Res Dep"
+			if `pdstart'==1980 di "     How many countries have full datasets with different starting years?" ///
+				_newline "       YEAR        COUNTRIES     LDCs         Res Dep"
 			di "       `pdstart'            `tot'          `ldc'           `nresdep'"
 			restore
 			}
@@ -917,8 +920,9 @@ use "$data\IMFRevMobilization2015.dta", clear
 	/* identify all countries that have the same start and end year and
 		interpolate any missing values in between */
 		by ctry: egen bookends = min(full) if inlist(year, 1995, 2012) // do countries have a full set of flows in 2000 and 2012?
-		by ctry: egen include = min(bookends) // project bookends onto rest of years for country
-			lab val bookends include yn
+		by ctry: egen include_tax = min(bookends) // project bookends onto rest of years for country
+			lab val bookends include_tax yn
+			
 		
 	*keep countries that have observations at both ends of range 
 		keep if include==2
@@ -940,25 +944,27 @@ use "$data\IMFRevMobilization2015.dta", clear
 	*save
 		save "$output\financialflows_const.dta", replace
 		
-	*extrapolate tax revenue from WDI
+	*extrapolate TAX REVENUE from IMF
 		*identify country with all flows in a given year
-				gen full = cond(tax!=.,2,1)
+				gen full = cond(taxr!=.,2,1)
 				
 		/* identify all countries that have the same start and end year and
 			interpolate any missing values in between */
 			by ctry: egen bookends = min(full) if inlist(year, 1995, 2012) // do countries have a full set of flows in 2000 and 2012?
-			by ctry: egen include = min(bookends) // project bookends onto rest of years for country
-				lab val bookends include yn
-				tab include ldc if year==2010
-				tab include nresdep if year==2010
+			by ctry: egen include_tax = min(bookends) // project bookends onto rest of years for country
+				lab var include_tax "Part of TAX REVENUE constant sample"
+				lab val bookends include_tax yn
+				tab ctry include_tax if year==2012 
+				tab include_tax ldc if year==2012
+				tab include_tax nresdep if year==2012
 		*interpolate between endpoints
 			sort ctry year
-			by ctry: ipolate tax year if include==2, gen(epol_tax)
-				local label : variable label tax	
-				lab var epol_tax "Extrapolated `label'"
+			by ctry: ipolate taxr year if include_tax==2, gen(epol_taxr)
+				local label : variable label taxr	
+				lab var epol_taxr "Extrapolated `label'"
 		
 		*drop
-			drop full bookends include
+			drop full bookends
 	
 	*save
 		save "$output\financialflows_const.dta", replace
@@ -992,29 +998,33 @@ use "$data\IMFRevMobilization2015.dta", clear
 						drop base95 flowbase
 						}
 						*end
-						
+				*gen var for tax observations only
+					foreach f in epol_official epol_private epol_remittances{
+						qui: gen `f'_t = `f' if include_tax==2
+						}
+						*end
 			*country level unweighted average
-				*gen country shares
+				*gen country shares (for countries with tax data)
 					foreach f in official private remittances{
-						qui: gen sh_`f' = epol_`f'/totflow  // share of total
-						qui: gen ysh_`f' = epol_`f'/gdp  // share of gdp
+						qui: gen sh_`f' = epol_`f'/totflow  if include_tax==2 // share of total
+						qui: gen ysh_`f' = epol_`f'/gdp  if include_tax==2 // share of gdp
 					}
 					*end
-				*gen country shares with tax
-					qui: gen sh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev) // tax share of total
-					qui: gen epol_other = epol_official + epol_remittances + epol_private
-					qui: gen sh_tax_other = epol_other/(totflow+epol_taxrev) // other share of total
-					qui: gen ysh_tax_taxrev = epol_taxrev/(totflow+epol_taxrev) // tax share of gdp
-					qui: gen ysh_tax_other = epol_other/(totflow+epol_taxrev)	//other share of gdp
+				*gen country shares with tax (for countries with tax data)
+					qui: gen sh_tax_taxrev = epol_taxr/(totflow+epol_taxr) if include_tax==2 // tax share of total
+					qui: gen epol_other = epol_official + epol_remittances + epol_private if include_tax==2
+					qui: gen sh_tax_other = epol_other/(totflow+epol_taxr) if include_tax==2 // other share of total
+					qui: gen ysh_tax_taxrev = epol_taxr/(totflow+epol_taxr) if include_tax==2 // tax share of gdp
+					qui: gen ysh_tax_other = epol_other/(totflow+epol_taxr)	if include_tax==2 //other share of gdp
 					
-				drop epol_official
+				*drop epol_official
 				
 			*collapse
 				collapse (`t') oda oof private remittances epol_* sh_* ysh_* totflow population gdp (max) cpi_d `x', by(year)
 			
 			*create offical flows variable
-				qui: gen epol_official = epol_oda + epol_oof
-					lab var epol_official "ODA and other offical flows"
+				*qui: gen epol_official = epol_oda + epol_oof
+				*	lab var epol_official "ODA and other offical flows"
 			
 			*create various flows
 				foreach f in official private remittances{
@@ -1114,7 +1124,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 	use "$output\financialflows.dta", clear	
 	
 	*collapse
-		collapse (sum) oda oof private remittances epol_taxrev if ldc==2, by(year)
+		collapse (sum) oda oof private remittances epol_taxr if ldc==2, by(year)
 		
 	*for stacked area (convert to billions)
 		ds year, not
@@ -1128,7 +1138,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 			lab var remit "Remittances"
 		gen priv = remit + private
 			lab var priv "Private Flows"
-		gen rev = priv + epol_taxrev
+		gen rev = priv + epol_taxr
 			lab var rev "Tax Revenues"
 	
 		
@@ -1168,7 +1178,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 	use "$output/financialflows.dta", clear	
 	
 	*collapse
-		collapse (sum) oda oof private remittances epol_taxrev if ldc!=2, by(year) //includes regions (missing)
+		collapse (sum) oda oof private remittances epol_taxr if ldc!=2, by(year) //includes regions (missing)
 		
 	*for stacked area (convert to billions)
 		ds year, not
@@ -1182,7 +1192,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 			lab var remit "Remittances"
 		gen priv = remit + private
 			lab var priv "Private Flows"
-		gen rev = priv + epol_taxrev
+		gen rev = priv + epol_taxr
 			lab var rev "Tax Revenues"
 	
 	*export
@@ -1224,7 +1234,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 		gen private_reg = private if devstatus==4 //regions
 		gen private_ctry = private if devstatus!=4
 	*collapse
-		collapse (sum) oda oof private* remittances epol_taxrev, by(year)
+		collapse (sum) oda oof private* remittances epol_taxr, by(year)
 		
 	*for stacked area (convert to billions)
 		ds year, not
@@ -1241,7 +1251,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 			lab var priv_ctry "Country Private Flows"
 		gen priv_reg = priv_ctry + private_reg
 			lab var priv_reg "Regional Private Flows"
-		gen rev = priv_reg + epol_taxrev
+		gen rev = priv_reg + epol_taxr
 			lab var rev "Tax Revenues"
 	*export
 		export excel using "$excel\FFgraphs.xlsx", sheet("TotDev") firstrow(variables) sheetreplace
@@ -1867,49 +1877,32 @@ bob
 	
 	use "$output\financialflows_const.dta", clear
 
-	* indentify a constant sample for resource dependence
-	*(full obseravtions for all years and flows)
-	
+	*Avg over 2008-2012 (keep obs in timeframe)
 		keep if year>=2008 & year<=2012
-		
-		*identify country with all flows in a given year
-			*egen flowmisscount = rowmiss(trv_tot_resource_rev trv_tot_nresource_rev_inc_sc trv_social_contrib)
-			*drop if flowmisscount==3 //no flows in a given year
-			*drop flowmisscount
-		
-		*gen official
-			gen epol_official = epol_oda + epol_oof
-			lab var epol_official "ODA and other offical flows"
+				
+	*create variable - official flows
+		gen epol_official = epol_oda + epol_oof
+		lab var epol_official "ODA and other offical flows"
 			
-		*gen totflow
-			gen totflow = epol_official + epol_remittances + epol_private
+	*create variable - total flows
+		gen totflow = epol_official + epol_remittances + epol_private
 		
-		*keep only full series (drop if rev data is missing)
-			drop if totflow==.
+	*convert to share of total at country level (unweighted average)
+		foreach f in epol_official epol_remittances epol_private {
+			gen sh_`f' = `f'/totflow
+		}
 
-		*convert to real & share of total at country level (unweighted average)
-			foreach f in totflow epol_official epol_remittances epol_private {
-				gen r_`f' = `f'/cpi_d
-				gen sh_r_`f' = `f'/r_totflow
+	*locals for collpase
+		local flows epol_official epol_private epol_remittances totflow
+		local shares sh_epol_official sh_epol_remittances sh_epol_private
+		
+	*collapse
+		collapse (sum)`flows' (mean) `shares', by(ldc year)
+		ds epol_* totflow
+		foreach v in `r(varlist)'{
+			replace `v' = `v'/1000
 			}
-			*end
-
-		*identify averages
-			local flows r_epol_official r_epol_private r_epol_remittances
-			local shares sh_r_epol_official sh_r_epol_remittances sh_r_epol_private
-			/*foreach f in `rev' `flows'{
-				bysort ctry: egen avg_`f' = mean(`f')
-				}
-				*end
-			*/
-		
-		*collapse
-			collapse `flows' `shares', by(ldc)
-			*collapse avg_*, by(resdep)
+		collapse `flows' `shares', by(ldc)
 			
 	*export		
 		export excel using "$excel\FFgraphs.xlsx", firstrow(variables) sheetreplace sheet("ConstLAvgLDCs")
-
-		
-				
-		
