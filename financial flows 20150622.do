@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/22  **
+**   Last Updated 6/24  **
 **************************
 
 /*
@@ -14,12 +14,10 @@
 	- SET DIRECTORIES
 	- IMPORT AND CLEAN DATA
 	- MERGE
-	- REPORTS
-	- INTERPOLATION/EXTRAPOLATION
-	- TOTAL FLOWS RANKING TABLES
-	- FIGURES
+	- REPORTS & RANKINGS
 	- IDENTIFY CONSTANT SAMPLE
 	- CONSTANT SAMPLE EXPORTS
+	- FIGURES
 	- REVENUE SHARES (WDI)
 	- EXPORT ADDITIONAL DATA FOR FIGURES
 	- 
@@ -27,7 +25,8 @@
 	- World Bank WDI
 	- UNCTAD
 	- OECD
-	- IMF
+	- IMF - WEO & GFS
+	
 ////////////////////////////////////////////////////////////////////////////////	
 */
 
@@ -496,7 +495,7 @@
 		rename Country ctry_imf
 		rename ISO ctrycode_iso
 		rename y1 genrev
-			lab var genrev "General Government Revenue, billions Nat'l currency"
+			lab var genrev "General Government Revenue, billions National Currency"
 			note genrev: "Revenue consists of taxes, social contributions, grants receivable, and other revenue. Revenue increases government?s net worth, which is the difference between its assets and liabilities (GFSM 2001, paragraph 4.20). Note: Transactions that merely change the composition of the balance sheet do not change the net worth position, for example, proceeds from sales of nonfinancial and financial assets or incurrence of liabilities."
 		rename y2 genrev_pctgdp
 			lab var genrev_pctgdp "General Government Revenue, percent of GDP"	
@@ -617,7 +616,7 @@
 			save "$output\fragility.dta", replace
 *IMF
 
-use "$data\IMFRevMobilization2015.dta", clear		
+	use "$data\IMFRevMobilization2015.dta", clear		
 	
 	*set as timeseries and fill
 		encode cname, gen(ctry)
@@ -639,7 +638,117 @@ use "$data\IMFRevMobilization2015.dta", clear
 				*end
 	*save
 		save "$output\imfrev.dta", replace
+		
+		
+* GFS Govt Expenditures
+	*http://elibrary-data.imf.org/QueryBuilder.aspx?key=19784658&s=322
+	*Imported cash only at general government level
+	
+	import excel "$data\Govt_Expenditures.xlsx", sheet("DATA") firstrow clear
+	
+	*encode/destring 
+		encode ConceptLabel, gen(type)
+		destring TimeLabel, gen(year)
+	*rename
+		rename CountryLabel ctry_imf
+		rename Value value
+	*eliminate extraneous variables
+		keep type ctry_imf year value
+	*convert to millions
+		replace value = value/1000
+	*create group/numerical variables for reshaping
+		egen id = group(ctry_im year)
+	*reshape for one column per expenditure type 
+		reshape wide value, i(id) j(type)
+		drop id
+		order ctry_imf year
+	*rename and label variables
+		rename value1 expetyp_emplcomp	
+			lab var expetyp_emplcomp "Compensation of Employees, (gen govt) millions National Currency"
+		rename value2 expetyp_consfc	
+			lab var expetyp_consfc "Consumption of Fixed Capital,(gen govt) millions National Currency"
+		rename value3 expfcn_defense	
+			lab var expfcn_defense "Defense, (gen govt) millions National Currency"
+		rename value4 expfcn_econaffairs	
+			lab var expfcn_econaffairs "Economic Affairs, (gen govt) millions National Currency"
+		rename value5 expfcn_educ	
+			lab var expfcn_educ "Education, (gen govt) millions National Currency"
+		rename value6 expfcn_envirpro	
+			lab var expfcn_envirpro "Environmental Protection, (gen govt) millions National Currency"
+		rename value7 expfcn_pubservices	
+			lab var expfcn_pubservices "General Public Services,(gen govt) millions National Currency"
+		rename value8 expfcn_health	
+			lab var expfcn_health "Health, (gen govt) millions National Currency"
+		rename value9 expfcn_housing	
+			lab var expfcn_housing "Housing and Community Amenities, (gen govt) millions National Currency"
+		rename value10 expetyp_interest	
+			lab var expetyp_interest "Interest, (gen govt) millions National Currency"
+		rename value11 expetyp_other	
+			lab var expetyp_other "Other Expense, (gen govt) millions National Currency"
+		rename value12 expfcn_safety	
+			lab var expfcn_safety "Public Order and Safety, (gen govt) millions National Currency"
+		rename value13 expfcn_rec	
+			lab var expfcn_rec "Recreation, Culture, and Religion, (gen govt) millions National Currency"
+		rename value14 expetyp_socben	
+			lab var expetyp_socben "Social Benefits, (gen govt) millions National Currency"
+		rename value15 expfcn_socpro	
+			lab var expfcn_socpro "Social Protection, (gen govt) millions National Currency"
+		rename value16 expetyp_subtran	
+			lab var expetyp_subtran "Subsidies and Transfers, (gen govt) millions National Currency"
+		rename value17 expetyp_totexp	
+			lab var expetyp_totexp "Total Expenditure, millions (gen govt) National Currency"
+		rename value18 expfcn_totoutlays	
+			lab var expfcn_totoutlays "Total Outlays, millions (gen govt) National Currency"
+		rename value19 expetyp_goodsservices	
+			lab var expetyp_goodsservices "Use of Goods and Services, (gen govt) millions National Currency"
+	*reorder
+		order ctry_imf year expfcn_totoutlays expfcn_pubservices expfcn_defense ///
+			expfcn_safety expfcn_econaffairs expfcn_envirpro expfcn_housing ///
+			expfcn_health expfcn_rec expfcn_educ expfcn_socpro expetyp_totexp ///
+			expetyp_emplcomp expetyp_goodsservices expetyp_consfc expetyp_interest ///
+			expetyp_subtran expetyp_socben expetyp_other
+			
+	*rename country for merge
+		replace ctry_imf = "Afghanistan, Islamic Republic Of" if ctry_imf=="Afghanistan, Islamic Republic of"
+		replace ctry_imf = "Armenia, Republic Of" if ctry_imf=="Armenia, Republic of"
+		replace ctry_imf = "Azerbaijan, Republic Of" if ctry_imf=="Azerbaijan, Republic of"
+		replace ctry_imf = "Belarus, Republic Of" if ctry_imf=="Belarus"
+		replace ctry_imf = "Hong Kong Special Administrative Region, People's Republic Of China" if ctry_imf=="China, P.R.: Hong Kong"
+		replace ctry_imf = "Macao Special Administrative Region, People's Republic Of China" if ctry_imf=="China, P.R.: Macao"
+		replace ctry_imf = "China, People's Republic Of" if ctry_imf=="China, P.R.: Mainland"
+		replace ctry_imf = "Congo, Republic Of" if ctry_imf=="Congo, Republic of"
+		replace ctry_imf = "Croatia, Republic Of" if ctry_imf=="Croatia"
+		replace ctry_imf = "Egypt, Arab Republic Of" if ctry_imf=="Egypt"
+		replace ctry_imf = "Iran, Islamic Republic Of" if ctry_imf=="Iran, Islamic Republic of"
+		replace ctry_imf = "Kazakhstan, Republic Of" if ctry_imf=="Kazakhstan"
+		replace ctry_imf = "Korea, Republic Of" if ctry_imf=="Korea, Republic of"
+		replace ctry_imf = "Latvia, Republic Of" if ctry_imf=="Latvia"
+		replace ctry_imf = "Lithuania, Republic Of" if ctry_imf=="Lithuania"
+		replace ctry_imf = "Macedonia, Former Yugoslav Republic Of" if ctry_imf=="Macedonia, FYR"
+		replace ctry_imf = "Moldova, Republic Of" if ctry_imf=="Moldova"
+		replace ctry_imf = "Netherlands Antilles, Kingdom Of The" if ctry_imf=="Netherlands Antilles"
+		replace ctry_imf = "Poland, Republic Of" if ctry_imf=="Poland"
+		replace ctry_imf = "Serbia, Republic Of" if ctry_imf=="Serbia, Republic of"
+		replace ctry_imf = "Tajikistan, Republic Of" if ctry_imf=="Tajikistan"
+		replace ctry_imf = "Timor-Leste, Democratic Republic Of" if ctry_imf=="Timor-Leste, Dem. Rep. of"
+		replace ctry_imf = "Uzbekistan, Republic Of" if ctry_imf=="Uzbekistan"
+		replace ctry_imf = "Yemen, Republic Of" if ctry_imf=="Yemen, Republic of"
 
+	*merge in iso
+		merge m:1 ctry_imf using "$output\concordance.dta", keepusing(ctrycode_iso) //merge with concordance to get ISO code
+ 			drop if _merge==2
+			drop _merge
+		replace ctrycode_iso = "PSE" if ctry_imf=="West Bank and Gaza"	
+		    
+	*add data source
+		ds ctry_imf year, not 
+		foreach v of varlist `r(varlist)'{
+				note `v': Source: IMF GFS (June 24, 2015)
+				}
+				*end
+	*save
+		save "$output\gfs.dta", replace
+		
 ********************************************************************************
 ********************************************************************************
 		
@@ -652,6 +761,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 		merge 1:1 ctrycode_iso year using "$output\unctad.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\imf.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\weo.dta", nogen
+		merge 1:1 ctrycode_iso year using "$output\gfs.dta", nogen
 		merge 1:1 ctrycode_iso year using "$output\imfrev.dta", ///
 			keepusing(taxr) nogen
 		merge m:1 ctrycode_iso using "$output\concordance.dta", ///
@@ -715,16 +825,26 @@ use "$data\IMFRevMobilization2015.dta", clear
 		drop if inlist(devstatus, 1, .)
 		
 	*covert all LCU figures to USD
-		replace rev_tax = rev_tax/exchange
-			lab var rev_tax "Tax revenue (general govt), millions USD"
-		replace rev_nontax = rev_nontax/exchange
-			lab var rev_nontax "Non-tax revenue (general govt), millions USD"
+		foreach r of varlist rev_tax rev_nontax expfcn_totoutlays-expetyp_other{
+			replace `r' = `r'/exchange
+			local varlabel : var label `r'
+			local newlabel : subinstr local varlabel "National Currency" "current USD", all
+			label variable `r' "`newlabel'"
+			}
+			*end
 		replace genrev = (genrev/exchange)*1000
 			lab var genrev "Overall revenue (general govt), millions USD"
 		rename taxr taxr_pct
 		gen taxr = (taxr_pct/100)*gdp
-			lab var taxr "Total tax revenue (excluding social contributions), millions of USD"
-		
+			lab var taxr "Total tax revenue (excluding social contributions), millions USD"
+		*convert ICTDGRD tax revenue to current dollars
+		foreach r of varlist tot_resource_rev tot_nresource_rev_inc_sc resource_taxes nresource_tax_inc_sc nresource_tax_ex_sc nresource_nontax resource_nontax social_contrib grants{
+			gen trv_`r' = (`r'/100)*gdp
+			local varlabel : var label `r'
+			local newlabel : subinstr local varlabel "(% of GDP)" ", millions current USD", all
+			label variable trv_`r' "`newlabel'"
+			}
+			*end
 	*add fragility measure (those in the top quartile)
 		*hist cpia14 if year==2013, freq bin(15)
 		sum cpia14, d
@@ -738,19 +858,11 @@ use "$data\IMFRevMobilization2015.dta", clear
 		tab fragile if year==2013,m
 			
 	*compare revenue observations
-		describe taxrev rev_tax genrev
-		notes list taxrev rev_tax genrev //sources
-		table year, c(n taxrev n rev_tax n genrev)
-		table ctry year if year>1989, c(n taxrev)
+		describe taxrev rev_tax genrev taxr
+		notes list taxrev rev_tax genrev taxr //sources
+		table year, c(n taxrev n rev_tax n genrev n taxr)
+		table ctry year if year>1989, c(n taxrev n taxr)
 		
-	*convert ICTDGRD tax revenue to current dollars
-		foreach r of varlist tot_resource_rev tot_nresource_rev_inc_sc resource_taxes nresource_tax_inc_sc nresource_tax_ex_sc nresource_nontax resource_nontax social_contrib grants{
-			gen trv_`r' = (`r'/100)*gdp
-			local varlabel : var label `r'
-			local newlabel : subinstr local varlabel "(% of GDP)" ", millions current USD", all
-			label variable trv_`r' "`newlabel'"
-			}
-			*end
 	* create 2nd resouce dependence variable
 		gen dep = .
 			replace dep = 1 if tot_resource_rev!=. & tot_nresource_rev_inc_sc!=.
@@ -781,7 +893,7 @@ use "$data\IMFRevMobilization2015.dta", clear
 ********************************************************************************
 ********************************************************************************
 		
-** REPORTS **
+** REPORTS & RANKINGS **
 	use "$output\financialflows.dta", clear	
 
 	*list of countries
@@ -803,49 +915,6 @@ use "$data\IMFRevMobilization2015.dta", clear
 	*sum of flows by year for 2000 & 2012 (millions USD)
 		table year if inlist(year, 2000, 2012), c(sum oda sum oof sum remittances sum private)
 
-********************************************************************************
-********************************************************************************
-/*
-** INTERPOLATION/EXTRAPOLATION **
-
-	use "$output\financialflows.dta", clear
-	sort ctry year
-	
-	/*
-	*extrapolation for all flows
-		foreach v of varlist oda oof private remittances taxrev rev_tax rev_nontax genrev{
-			by ctry: ipolate `v' year, gen(epol_`v') epolate
-				local label : variable label `v'		
-				lab var epol_`v' "Extrapolated `label'"
-			*report
-				di "`v' : `label'"
-				table year, c(n ctry n `v' n epol_`v')
-			}
-			*end
-	*/
-	*extrapolate fore WDI's tax revenue (central govt)
-		by ctry: ipolate taxrev year, gen(epol_taxrev) epolate
-			local label : variable label taxrev		
-			lab var epol_taxrev "Extrapolated `label'"
-			
-	*check out observation #
-		table year, c(n ctry n taxrev n epol_taxrev)
-		
-	*check out data consistency
-		table year if epol_taxrev<0, c(n epol_taxrev) //negative values
-			replace epol_taxrev=. if epol_taxrev<0
-		*browse ctry year taxrev epol_taxrev
-			table year, c(n ctry n taxrev n epol_taxrev)
-	*save
-		save "$output\financialflows.dta", replace	
-*/
-********************************************************************************
-********************************************************************************
-
-** TOTAL FLOWS RANKING TABLES **
-
-	use "$output\financialflows.dta", clear
-	
 	*create official flows variable
 		gen official = oda + oof
 				lab var official "ODA and other offical flows"
@@ -1006,16 +1075,18 @@ use "$data\IMFRevMobilization2015.dta", clear
 			*country level unweighted average
 				*gen country shares (for countries with tax data)
 					foreach f in official private remittances{
-						qui: gen sh_`f' = epol_`f'/totflow  if include_tax==2 // share of total
-						qui: gen ysh_`f' = epol_`f'/gdp  if include_tax==2 // share of gdp
+						qui: gen sh_`f' = epol_`f'/totflow  // share of total
+						qui: gen ysh_`f' = epol_`f'/gdp // share of gdp
+						qui: gen sh_`f'_t = epol_`f'/totflow  if include_tax==2 // share of total
+						qui: gen ysh_`f'_t = epol_`f'/gdp  if include_tax==2 // share of gdp
 					}
 					*end
 				*gen country shares with tax (for countries with tax data)
 					qui: gen sh_tax_taxrev = epol_taxr/(totflow+epol_taxr) if include_tax==2 // tax share of total
 					qui: gen epol_other = epol_official + epol_remittances + epol_private if include_tax==2
 					qui: gen sh_tax_other = epol_other/(totflow+epol_taxr) if include_tax==2 // other share of total
-					qui: gen ysh_tax_taxrev = epol_taxr/(totflow+epol_taxr) if include_tax==2 // tax share of gdp
-					qui: gen ysh_tax_other = epol_other/(totflow+epol_taxr)	if include_tax==2 //other share of gdp
+					qui: gen ysh_tax_taxrev = epol_taxr/gdp if include_tax==2 // tax share of gdp
+					qui: gen ysh_tax_other = epol_other/gdp	if include_tax==2 //other share of gdp
 					
 				*drop epol_official
 				
