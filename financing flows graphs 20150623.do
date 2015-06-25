@@ -144,6 +144,11 @@
 		save `availability'
 	*ldc and other
 		use "$output\financialflows_const.dta", clear
+		count if ldc==2 & year==2012
+			global count_ldc = `r(N)'
+		count if ldc==1 & year==2012
+			global count_other = `r(N)'
+			global count_all = $count_ldc + $count_other
 		collapse (sum) epol_oda epol_oof epol_remittances epol_private, by(ldc year)
 		gen epol_official = epol_oda + epol_oof
 			lab var epol_official "ODA and other offical flows"
@@ -179,6 +184,9 @@
 		local title1 "Total current billions USD"
 		local title2 ""
 		local title3 ""
+		local ytitle1 "All Developing (n=$count_all)"
+		local ytitle2 "LDC (n=$count_ldc)"
+		local ytitle3 "Other Developing (n=$count_other)"
 		local ylabel1 0(100)600
 		local ylabel2 0(10)60
 		local ylabel3 0(100)600
@@ -189,7 +197,7 @@
 				ylabel(`ylabel`i'', grid angle(0) notick) yscale(noline) ///
 				legend(off) ///
 				title("`title`i''", color(black)) ///
-				ytitle("") xtitle("") ///
+				ytitle("{bf:`ytitle`i''}") xtitle("") ///
 				name(`name`i'', replace) ///
 				plotregion(style(none)) ///
 				graphregion(color(white)) ///
@@ -216,16 +224,16 @@
 		forvalues i = 1/3{
 			twoway line sh_epol_official year if `group`i'', lcolor("15 111 198" ) lwidth(medthick) ylabel(`ylabel`i'') || ///
 				scatter sh_epol_official year if `group`i'' & ends==1, msize(large) mcolor("15 111 198") ylabel(`ylabel`i'') || ///
-				scatter sh_epol_official year if ends==1 & `i'==3, msize(medlarge) ///
+				scatter sh_epol_official year if ends==1 & `group`i'' & `i'==1, msize(large) ///
 					mcolor("15 111 198") mlabel(labelo) mlabposition(6) mlabcolor(black) || ///
 				line sh_epol_remittances year if `group`i'', lcolor("16 207 115" ) lwidth(medthick) ylabel(`ylabel`i'') || ///
 				scatter sh_epol_remittances year if `group`i'' & ends==1, msize(large) mcolor("16 207 115") ylabel(`ylabel`i'') || ///
-				scatter sh_epol_remittances year if ends==1 & `i'==3, msize(medlarge) ///
-					mcolor("16 207 115") mlabel(labelr) mlabposition(6) mlabcolor(black) || ///
+				scatter sh_epol_remittances year if ends==1 & `group`i'' & `i'==1, msize(large) ///
+					mcolor("16 207 115") mlabel(labelr) mlabposition(12) mlabcolor(black) || ///
 				line sh_epol_private year if `group`i'', lcolor("4 97 123") lwidth(medthick) ylabel(`ylabel`i'') || ///
-				scatter sh_epol_private year if `group`i'' & ends==1, msize(large) mcolor("4 97 123")  ///
-				scatter sh_epol_`group`i'' year if ends==1 & `i'==3, msize(medlarge) ///
-					mcolor("4 97 123") mlabel(labelp) mlabposition(6) mlabcolor(black) || ///
+				scatter sh_epol_private year if `group`i'' & ends==1, msize(large) mcolor("4 97 123")  || ///
+				scatter sh_epol_private year if ends==1 & `group`i'' & `i'==1, msize(large) ///
+					mcolor("4 97 123") mlabel(labelp) mlabposition(12) mlabcolor(black)  ///
 				legend(off) ///
 				title("`title`i''", color(black)) ///
 				ytitle("") xtitle("") ///
@@ -243,11 +251,160 @@
 			graphregion(color(white)) nodraw ///
 			title("Financial Flows Across Income Levels", color(black) box bexpand bcolor("217 217 217")) ///
 			note("Source: Official and Private Flows (OECD); Remittances (The World Bank)" ///
-				"Note: Sample of 78 countries constant across all 12 years (constant sample); interpolated where datawas missing", ///
+				"Note: Sample of 78 countries constant across all 12 years (constant sample); interpolated where data was missing", ///
 				size(vsmall))
 		graph display, ysize(5) xsize(4)
-		graph export "$graph\ff_fig2.pdf", replace
+		graph export "$graph\ff_fig2a.pdf", replace
+
 
 		
+		
+*** FIGURE 2b ***
 
+*Setup
+	use "$output\financialflows_const.dta", clear
+		
+		count if ldc==2 & year==2012
+			global count_ldc = `r(N)'
+		count if ldc==1 & year==2012
+			global count_other = `r(N)'
+			global count_all = $count_ldc + $count_other
+			
+	*Avg over 2008-2012 (keep obs in timeframe)
+		keep if year>=2008 & year<=2012
 				
+	*create variable - official flows
+		gen epol_official = epol_oda + epol_oof
+		lab var epol_official "ODA and other offical flows"
+			
+	*create variable - total flows
+		gen totflow = epol_official + epol_remittances + epol_private
+		
+	*convert to share of total at country level (unweighted average)
+		foreach f in epol_official epol_remittances epol_private {
+			gen sh_`f' = (`f'/totflow)*100
+		}
+
+	*locals for collpase
+		local flows epol_official epol_private epol_remittances totflow
+		local shares sh_epol_official sh_epol_remittances sh_epol_private
+	*collapse
+		collapse `flows' `shares', by(ldc)
+		ds epol_* totflow
+		foreach v in `r(varlist)'{
+			replace `v' = `v'/1000 //convert to billions
+			}
+		*end
+	*shares of aggregate
+		foreach f in official remittances private{
+			gen agsh_`f' = (epol_`f'/totflow)*100
+		}
+		*end
+	
+	*unweighted
+	local count = 1
+	foreach f in official remittances private{
+		rename sh_epol_`f' fsh`count'
+		local count = 1 + `count'
+		}
+		*end
+	*weighted
+	local count = 4
+	foreach f in official remittances private{
+		rename agsh_`f' fsh`count'
+		local count = 1 + `count'
+		}
+		*end
+		
+	keep ldc fsh*
+	reshape long fsh, i(ldc) j(flow)
+		lab def flow 1 "Official" 2 "Remittances" 3 "Private"
+		lab val flow flow
+	gen weighted = cond(flow<4,2,1)
+		lab var weighted "Weighted Average"
+		lab def weighted 1 "Weighted" 2 "Unweighted"
+		lab val weighted weighted
+	recode flow (4=1) (5=2) (6=3)
+	order ldc weighted flow
+	tempfile base
+	save `base'
+	
+	keep if ldc==2
+	drop ldc
+	reshape wide fsh, i(weight)  j(flow)
+	gen ldc = 2
+	tempfile ldc
+	save `ldc'
+	
+	use `base'
+	keep if ldc==1
+	drop ldc
+	reshape wide fsh, i(weight)  j(flow)
+	gen ldc=1
+	append using `ldc'
+	
+	order ldc weighted
+	recode ldc (1=2) (2=1)
+		lab def ldc 1 "LDC (n=$count_ldc)" 2 "Other Developing (n=$count_other)"
+		lab val ldc ldc
+	
+	rename fsh1 official
+	rename fsh2 remittances
+	rename fsh3 private
+	*gen spacers between bars
+		gen space1 = 70 - official
+		gen space2 = 60 - remittances
+		gen space3 = 35 - private
+	egen id = group(ldc weight)
+	
+	graph hbar (asis) official space1 remittances space2 private space3, ///
+		over(weighted) over(ldc, label(angle(vertical))) stack ///
+		bar(1, fcolor("15 111 198") lcolor("15 111 198")) ///
+		bar(2, fcolor(none) lcolor(white)) ///
+		bar(3, fcolor("16 207 115") lcolor("16 207 115") ) ///
+		bar(4, fcolor(none) lcolor(white)) ///
+		bar(5, fcolor("4 97 123") lcolor("4 97 123") ) ///
+		bar(6, fcolor(none) lcolor(white) ) ///
+		blabel(bar, color(white) position(center) format(%3.0f)) ///
+		title("Share of Total Average Financial Flows (%)", color(black) box bexpand bcolor("217 217 217")) ///
+		plotregion(style(none)) ///
+		graphregion(color(white)) ///
+		ytitle("") ylabel(,nogrid) yscale(off) ///
+		legend(off) ///
+		note("Source: Official and Private Flows (OECD); Remittances (The World Bank)" ///
+			"Note: County averages between 2008-2012 (Constant Sample)", ///
+			size(vsmall))
+		graph export "$graph\ff_fig2b.pdf", replace
+
+* Figure 3
+
+*Check Share of GDP % (unweighted) for Other Developing [Figure 2 (ALT))				
+		  		
+	use "$output\financialflows_const.dta", clear			
+				
+	*create total flow			
+		qui: gen totflow = epol_oda + epol_oof + epol_private + epol_remittances		
+			lab var totflow "Total Financial Flows"	
+				
+	*gen official			
+		qui: gen epol_official = epol_oda + epol_oof		
+			lab var epol_official "ODA and other offical flows"	
+					
+	*country level unweighted average			
+		*gen country shares (for countries with tax data)		
+			foreach f in official private remittances{	
+				qui: gen ysh_`f' = epol_`f'/gdp   // share of gdp
+			}	
+			*end	
+
+	*collapse			
+		collapse (sum) epol_* totflow gdp (mean) ysh_*, by(ldc year)		
+	*create aggregate share
+		
+	*convert to billions (already millions)			
+		qui: ds epol_* totflow gdp
+		foreach v of varlist epol* totflow gdp{		
+			qui: replace `v' = `v'/1000	
+		}		
+		*end		
+	
