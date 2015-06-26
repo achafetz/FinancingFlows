@@ -17,7 +17,7 @@
 	- REPORTS & RANKINGS
 	- IDENTIFY CONSTANT SAMPLE
 	- CONSTANT SAMPLE EXPORTS
-	- FIGURES
+	- INITIAL FIGURES
 	- REVENUE SHARES (WDI)
 	- EXPORT ADDITIONAL DATA FOR FIGURES
 	- 
@@ -1188,7 +1188,7 @@
 ********************************************************************************
 ********************************************************************************
 
-** FIGURES **
+** INITIAL FIGURES **
 
 *LDCs
 	
@@ -1360,7 +1360,6 @@
 		graph export "$graph/ff_alltax.pdf", replace
 
 
-bob
 
 ********************************************************************************
 ********************************************************************************
