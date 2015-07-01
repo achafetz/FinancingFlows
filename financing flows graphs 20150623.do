@@ -220,7 +220,7 @@
 		local ylabel1 0(25)100
 		local ylabel2 0(25)100
 		local ylabel3 0(25)100
-	*graphs
+	*graphs 
 		forvalues i = 1/3{
 			twoway line sh_epol_official year if `group`i'', lcolor("15 111 198" ) lwidth(medthick) ylabel(`ylabel`i'') || ///
 				scatter sh_epol_official year if `group`i'' & ends==1, msize(large) mcolor("15 111 198") ylabel(`ylabel`i'') || ///
