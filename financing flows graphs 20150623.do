@@ -21,7 +21,7 @@
 		merge 1:1 year using `availability', nogen
 		foreach v of varlist epol_remittances-official{
 			replace `v' = `v'/1000 //convert to billions
-			}
+			} 
 		gen ends = 1 if inlist(year, 1995, 2012)
 		gen labela = "Availability" if year==2012
 		gen labelc = "Constant" if year==2012
