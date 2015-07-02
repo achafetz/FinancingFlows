@@ -615,7 +615,6 @@
 		*save
 			save "$output\fragility.dta", replace
 *IMF
-
 	use "$data\IMFRevMobilization2015.dta", clear		
 	
 	*set as timeseries and fill
@@ -644,6 +643,7 @@
 	*http://elibrary-data.imf.org/QueryBuilder.aspx?key=19784658&s=322
 	*Imported cash only at general government level
 	
+	disp as error "Data not publically avaialable. Data not stored on GitHub"
 	import excel "$data\Govt_Expenditures.xlsx", sheet("DATA") firstrow clear
 	
 	*encode/destring 
