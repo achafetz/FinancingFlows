@@ -21,7 +21,7 @@
 		merge 1:1 year using `availability', nogen
 		foreach v of varlist epol_remittances-official{
 			replace `v' = `v'/1000 //convert to billions
-			}
+			} 
 		gen ends = 1 if inlist(year, 1995, 2012)
 		gen labela = "Availability" if year==2012
 		gen labelc = "Constant" if year==2012
@@ -220,7 +220,7 @@
 		local ylabel1 0(25)100
 		local ylabel2 0(25)100
 		local ylabel3 0(25)100
-	*graphs
+	*graphs 
 		forvalues i = 1/3{
 			twoway line sh_epol_official year if `group`i'', lcolor("15 111 198" ) lwidth(medthick) ylabel(`ylabel`i'') || ///
 				scatter sh_epol_official year if `group`i'' & ends==1, msize(large) mcolor("15 111 198") ylabel(`ylabel`i'') || ///

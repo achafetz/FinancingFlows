@@ -4,7 +4,7 @@
 **     Aaron Chafetz    **
 **     USAID/E3/PLC     **
 **     May 21, 2015     **
-**   Last Updated 6/24  **
+**   Last Updated 7/1   **
 **************************
 
 /*
@@ -615,7 +615,6 @@
 		*save
 			save "$output\fragility.dta", replace
 *IMF
-
 	use "$data\IMFRevMobilization2015.dta", clear		
 	
 	*set as timeseries and fill
@@ -644,6 +643,7 @@
 	*http://elibrary-data.imf.org/QueryBuilder.aspx?key=19784658&s=322
 	*Imported cash only at general government level
 	
+	disp as error "Data not publically avaialable. Data not stored on GitHub"
 	import excel "$data\Govt_Expenditures.xlsx", sheet("DATA") firstrow clear
 	
 	*encode/destring 
@@ -947,6 +947,37 @@
 		sort rank_tot
 		list rank_tot ctry totflow in 1/10, noobs
 
+	* list of countries in different groups
+		*LDC
+		preserve
+		collapse ldc if ldc==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Fragile
+		preserve
+		collapse fragile if fragile==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Resource Dependence
+		preserve
+		collapse resdep if resdep==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Full sample & regions
+		keep if year==2012
+		keep ctry reg_wb
+		sort reg_wb ctry
+		browse
+		
+		*Constant Sample
+		use13 "$output/financialflows_const.dta", clear
+		keep if year==2012
+		keep ctry reg_wb
+		sort ctry
+		browse
 
 ********************************************************************************
 ********************************************************************************
