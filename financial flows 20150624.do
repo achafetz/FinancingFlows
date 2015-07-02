@@ -947,6 +947,37 @@
 		sort rank_tot
 		list rank_tot ctry totflow in 1/10, noobs
 
+	* list of countries in different groups
+		*LDC
+		preserve
+		collapse ldc if ldc==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Fragile
+		preserve
+		collapse fragile if fragile==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Resource Dependence
+		preserve
+		collapse resdep if resdep==2, by(ctry)
+		list ctry, noobs clean
+		restore
+		
+		*Full sample & regions
+		keep if year==2012
+		keep ctry reg_wb
+		sort reg_wb ctry
+		browse
+		
+		*Constant Sample
+		use13 "$output/financialflows_const.dta", clear
+		keep if year==2012
+		keep ctry reg_wb
+		sort ctry
+		browse
 
 ********************************************************************************
 ********************************************************************************
